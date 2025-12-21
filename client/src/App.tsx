@@ -1,21 +1,29 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import Pipelines from "./pages/Pipelines";
 import PipelineDetail from "./pages/PipelineDetail";
 import Modules from "./pages/Modules";
 import ModuleDetail from "./pages/ModuleDetail";
+import Variables from "./pages/Variables";
+import Dashboard from "./pages/Dashboard";
 
-export default function App() {
+function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<Pipelines />} />
+    <Router>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/pipelines" element={<Pipelines />} />
           <Route path="/pipelines/:id" element={<PipelineDetail />} />
+          <Route path="/pipelines/new" element={<PipelineDetail />} />
           <Route path="/modules" element={<Modules />} />
           <Route path="/modules/:id" element={<ModuleDetail />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
-  )
+          <Route path="/modules/new" element={<ModuleDetail />} />
+          <Route path="/variables" element={<Variables />} />
+        </Routes>
+      </Layout>
+    </Router>
+  );
 }
+
+export default App;

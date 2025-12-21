@@ -1,67 +1,60 @@
+// Executes a shell command.
+//
+// Usage Example:
+// {
+//   "module": "shell",
+//   "params": {
+//     "cmd": "echo 'Hello World'"
+//   }
+// }
+//
+// Returns: { "code": 0, "output": "Hello World" }
 
-export async function run(ctx: any, params: { cmd: string | string[], cwd?: string }) {
-  const cmdLine = Array.isArray(params.cmd) ? params.cmd : [params.cmd];
+export async function run(ctx: any, params: { cmd: string }) {
+  if (ctx.log) ctx.log(`[Shell] Executing: ${params.cmd}`);
 
-  // Use 'sh -c' or 'cmd /c' to support shell strings if needed, 
-  // but Deno.Command usage is safer if we parse args.
-  // For simplicity/power, let's assume the user accepts shell splitting if they pass a string,
-  // OR we can wrap in sh -c.
-
-  let cmd: string[];
-  let program: string;
-  let args: string[];
-
-  if (params.cmdRaw) {
-    // If user specifically wants raw shell execution
-    if (Deno.build.os === "windows") {
-      program = "cmd";
-      args = ["/c", params.cmdRaw];
-    } else {
-      program = "sh";
-      args = ["-c", params.cmdRaw];
-    }
-  } else {
-    // Simple splitting or usage of array
-    // To be truly robust similar to 'exec', we might want sh -c by default for string input.
-    // Let's stick to Deno.Command default behavior:
-    // If string, we can't easily execute complex pipes without sh/cmd.
-    // We'll require array for complex args, or implement a simple splitter?
-    // Let's use 'sh -c' logic for string inputs to be "user friendly" for pipes/redirections.
-    if (typeof params.cmd === 'string') {
-      if (Deno.build.os === "windows") {
-        program = "cmd";
-        args = ["/c", params.cmd];
-      } else {
-        program = "sh";
-        args = ["-c", params.cmd];
-      }
-    } else {
-      // Array
-      program = params.cmd[0];
-      args = params.cmd.slice(1);
-    }
-  }
-
-  console.log(`[Shell] Running: ${program} ${args.join(" ")}`);
-
-  const command = new Deno.Command(program, {
-    args: args,
-    cwd: params.cwd || ctx.cwd,
+  const command = new Deno.Command("sh", {
+    args: ["-c", params.cmd],
+    cwd: ctx.cwd,
+    env: ctx.env,
     stdout: "piped",
     stderr: "piped",
   });
 
-  const output = await command.output();
-  const outStr = new TextDecoder().decode(output.stdout);
-  const errStr = new TextDecoder().decode(output.stderr);
+  const process = command.spawn();
 
-  // Log output (could be streamed in a better implementation)
-  if (outStr) console.log(outStr);
-  if (errStr) console.error(errStr);
+  // Helper to stream output
+  const streamOutput = async (readable: ReadableStream<Uint8Array>, prefix: string = "") => {
+    const reader = readable.pipeThrough(new TextDecoderStream()).getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        // value can be partial lines, but for simplicity let's log chunks or split lines
+        // For better UX, splitting by line is preferred, but simple chunk logging works for "tailing"
+        if (ctx.log) {
+          // Basic line buffering could be improved, but direct logging is safe enough for now
+          const lines = value.split('\n');
+          for (const line of lines) {
+            if (line) ctx.log(line);
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  };
 
-  if (!output.success) {
-    throw new Error(`Command failed with code ${output.code}: ${errStr}`);
+  await Promise.all([
+    streamOutput(process.stdout),
+    streamOutput(process.stderr, "[ERR] "),
+  ]);
+
+  const status = await process.status;
+
+  if (!status.success) {
+    throw new Error(`Command failed with code ${status.code}`);
   }
 
-  return { stdout: outStr, stderr: errStr, code: output.code };
+  return { code: status.code };
 }

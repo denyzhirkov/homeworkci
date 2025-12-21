@@ -1,4 +1,4 @@
-# Homework
+# HomeworkCI
 
 Minimalist CI/CD home server built with Deno and React.
 

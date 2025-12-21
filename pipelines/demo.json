@@ -1,0 +1,71 @@
+{
+  "name": "Demo Pipeline",
+  "description": "Demonstrates all HomeworkCI features: parallel execution, named steps, variables, and step results.",
+  "steps": [
+    {
+      "name": "start",
+      "description": "Log pipeline start",
+      "module": "shell",
+      "params": {
+        "cmd": "echo '🚀 Starting demo pipeline...'"
+      }
+    },
+    {
+      "name": "api1",
+      "description": "Fetch users data",
+      "module": "http",
+      "params": {
+        "url": "https://jsonplaceholder.typicode.com/users/1"
+      },
+      "parallel": "fetch"
+    },
+    {
+      "name": "api2",
+      "description": "Fetch posts data",
+      "module": "http",
+      "params": {
+        "url": "https://jsonplaceholder.typicode.com/posts/1"
+      },
+      "parallel": "fetch"
+    },
+    {
+      "name": "api3",
+      "description": "Fetch comments data",
+      "module": "http",
+      "params": {
+        "url": "https://jsonplaceholder.typicode.com/comments/1"
+      },
+      "parallel": "fetch"
+    },
+    {
+      "description": "Process fetched data using ${results.name}",
+      "module": "shell",
+      "params": {
+        "cmd": "echo 'User: ${results.api1.name}' && echo 'Post title: ${results.api2.title}' && echo 'Comment by: ${results.api3.email}'"
+      }
+    },
+    {
+      "name": "delay_demo",
+      "description": "Demonstrate delay module",
+      "module": "delay",
+      "params": {
+        "ms": 1000
+      }
+    },
+    {
+      "description": "Use ${prev} to access previous step result",
+      "module": "shell",
+      "params": {
+        "cmd": "echo 'Delay result: ${prev}'"
+      }
+    },
+    {
+      "description": "Final step - pipeline complete",
+      "module": "shell",
+      "params": {
+        "cmd": "echo '✅ Demo pipeline completed successfully!'"
+      }
+    }
+  ]
+}
+

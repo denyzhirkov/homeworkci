@@ -1,23 +1,23 @@
+// File system operations.
+//
+// Usage Examples:
+// Read:
+// { "module": "fs", "params": { "op": "read", "path": "./config.json" } }
+//
+// Write:
+// { "module": "fs", "params": { "op": "write", "path": "./out.txt", "content": "data" } }
+
 import { ensureDir } from "@std/fs";
 import { dirname } from "@std/path";
 
-export async function run(ctx: any, params: { op: "read" | "write" | "delete", path: string, content?: string }) {
-  const filePath = params.path; // Absolute or relative? 
-  // Ideally relative to workspace. 
-  // For now assuming path is either absolute or relative to CWD.
-
+export async function run(ctx: any, params: { op: "read" | "write"; path: string; content?: string }) {
   if (params.op === "read") {
-    const data = await Deno.readTextFile(filePath);
-    return { content: data };
+    return await Deno.readTextFile(params.path);
   } else if (params.op === "write") {
-    if (params.content === undefined) throw new Error("Content required for write op");
-    await ensureDir(dirname(filePath));
-    await Deno.writeTextFile(filePath, params.content);
+    if (params.content === undefined) throw new Error("Content required for write");
+    await ensureDir(dirname(params.path));
+    await Deno.writeTextFile(params.path, params.content);
     return { success: true };
-  } else if (params.op === "delete") {
-    await Deno.remove(filePath);
-    return { success: true };
-  } else {
-    throw new Error(`Unknown op: ${params.op}`);
   }
+  throw new Error(`Unknown op: ${params.op}`);
 }

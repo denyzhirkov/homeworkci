@@ -1,0 +1,11 @@
+{
+  "name": "New Pipeline2",
+  "steps": [
+    {
+      "module": "shell",
+      "params": {
+        "cmd": "ping google.com"
+      }
+    }
+  ]
+}

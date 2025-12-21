@@ -2,30 +2,39 @@
   "version": "5",
   "specifiers": {
     "jsr:@hono/hono@4": "4.11.1",
+    "jsr:@std/assert@0.218": "0.218.2",
     "jsr:@std/assert@~0.218.2": "0.218.2",
+    "jsr:@std/fmt@~0.218.2": "0.218.2",
     "jsr:@std/fs@0.218": "0.218.2",
     "jsr:@std/path@0.218": "0.218.2",
     "jsr:@std/path@~0.218.2": "0.218.2",
-    "npm:cron-parser@^4.9.0": "4.9.0"
+    "npm:cron-parser@^4.9.0": "4.9.0",
+    "npm:uuid@13": "13.0.0"
   },
   "jsr": {
     "@hono/hono@4.11.1": {
       "integrity": "28bb28c7322a1379e7132af05ef76aef09f86bb8cdd7077c67e004dea288ac0d"
     },
     "@std/assert@0.218.2": {
-      "integrity": "7f0a5a1a8cf86607cd6c2c030584096e1ffad27fc9271429a8cb48cfbdee5eaf"
+      "integrity": "7f0a5a1a8cf86607cd6c2c030584096e1ffad27fc9271429a8cb48cfbdee5eaf",
+      "dependencies": [
+        "jsr:@std/fmt"
+      ]
+    },
+    "@std/fmt@0.218.2": {
+      "integrity": "99526449d2505aa758b6cbef81e7dd471d8b28ec0dcb1491d122b284c548788a"
     },
     "@std/fs@0.218.2": {
       "integrity": "dd9431453f7282e8c577cc22c9e6d036055a9a980b5549f887d6012969fabcca",
       "dependencies": [
-        "jsr:@std/assert",
+        "jsr:@std/assert@~0.218.2",
         "jsr:@std/path@~0.218.2"
       ]
     },
     "@std/path@0.218.2": {
       "integrity": "b568fd923d9e53ad76d17c513e7310bda8e755a3e825e6289a0ce536404e2662",
       "dependencies": [
-        "jsr:@std/assert"
+        "jsr:@std/assert@~0.218.2"
       ]
     }
   },
@@ -38,6 +47,10 @@
     },
     "luxon@3.7.2": {
       "integrity": "sha512-vtEhXh/gNjI9Yg1u4jX/0YVPMvxzHuGgCm6tC5kZyb08yjGWGnqAjGJvcXbqQR2P3MyMEFnRbpcdFS6PBcLqew=="
+    },
+    "uuid@13.0.0": {
+      "integrity": "sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w==",
+      "bin": true
     }
   },
   "workspace": {
@@ -46,7 +59,8 @@
       "jsr:@std/assert@0.218",
       "jsr:@std/fs@0.218",
       "jsr:@std/path@0.218",
-      "npm:cron-parser@^4.9.0"
+      "npm:cron-parser@^4.9.0",
+      "npm:uuid@13"
     ]
   }
 }

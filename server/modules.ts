@@ -10,12 +10,55 @@ export interface StepModule {
   run: (ctx: any, params: any) => Promise<any>;
 }
 
-export async function listModules(): Promise<string[]> {
-  const modules: string[] = [];
+const DEFAULT_MODULES = ["shell", "http", "git", "fs", "delay"];
+
+export function isBuiltInModule(name: string): boolean {
+  return DEFAULT_MODULES.includes(name);
+}
+
+export interface ModuleInfo {
+  id: string;
+  description: string;
+  fullDocs: string;
+  isBuiltIn: boolean;
+}
+
+export async function listModules(): Promise<ModuleInfo[]> {
+  const modules: ModuleInfo[] = [];
   try {
     for await (const entry of Deno.readDir(MODULES_DIR)) {
       if (entry.isFile && entry.name.endsWith(".ts")) {
-        modules.push(parse(entry.name).name);
+        const name = parse(entry.name).name;
+
+        let description = "";
+        let fullDocs = "";
+
+        try {
+          const content = await Deno.readTextFile(join(MODULES_DIR, entry.name));
+          const lines = content.split("\n");
+          const commentLines: string[] = [];
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith("//")) {
+              commentLines.push(trimmed.substring(2).trim());
+            } else if (trimmed === "") {
+              // Allow empty lines in comments block
+              continue;
+            } else {
+              // Stop at first non-comment non-empty line
+              break;
+            }
+          }
+
+          if (commentLines.length > 0) {
+            description = commentLines[0];
+            fullDocs = commentLines.join("\n");
+          }
+
+        } catch (e) { console.error("Error parsing module " + name, e); }
+
+        modules.push({ id: name, description, fullDocs, isBuiltIn: DEFAULT_MODULES.includes(name) });
       }
     }
   } catch (e) {
@@ -53,5 +96,8 @@ export async function saveModule(name: string, content: string): Promise<void> {
 
 export async function deleteModule(name: string): Promise<void> {
   const safeName = parse(name).name;
+  if (DEFAULT_MODULES.includes(safeName)) {
+    throw new Error("Cannot delete default module.");
+  }
   await Deno.remove(join(MODULES_DIR, `${safeName}.ts`));
 }

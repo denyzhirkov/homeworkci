@@ -1,0 +1,12 @@
+{
+  "name": "ping",
+  "steps": [
+    {
+      "module": "shell",
+      "params": {
+        "cmd": "ping google.com"
+      }
+    }
+  ],
+  "id": "4f3d45ee-7183-4522-9780-abca7745a4f9"
+}

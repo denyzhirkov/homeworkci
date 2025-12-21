@@ -1,28 +1,22 @@
-import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import {
   AppBar, Toolbar, Typography, Drawer, List, ListItem,
   ListItemButton, ListItemIcon, ListItemText, Box, CssBaseline
 } from "@mui/material";
-import { Layers, Extension } from "@mui/icons-material";
+import {
+  AccountTree, Extension, Settings, Home
+} from "@mui/icons-material";
+import { Link } from "react-router-dom";
 
 const drawerWidth = 240;
 
-export default function Layout() {
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  const menuItems = [
-    { text: "Pipelines", icon: <Layers />, path: "/" },
-    { text: "Modules", icon: <Extension />, path: "/modules" },
-  ];
-
+export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <Box sx={{ display: 'flex' }}>
       <CssBaseline />
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar>
           <Typography variant="h6" noWrap component="div">
-            Homework
+            HomeworkCI
           </Typography>
         </Toolbar>
       </AppBar>
@@ -37,25 +31,36 @@ export default function Layout() {
         <Toolbar />
         <Box sx={{ overflow: 'auto' }}>
           <List>
-            {menuItems.map((item) => (
-              <ListItem key={item.text} disablePadding>
-                <ListItemButton
-                  selected={location.pathname === item.path}
-                  onClick={() => navigate(item.path)}
-                >
-                  <ListItemIcon>
-                    {item.icon}
-                  </ListItemIcon>
-                  <ListItemText primary={item.text} />
-                </ListItemButton>
-              </ListItem>
-            ))}
+            <ListItem disablePadding>
+              <ListItemButton component={Link} to="/">
+                <ListItemIcon><Home /></ListItemIcon>
+                <ListItemText primary="Dashboard" />
+              </ListItemButton>
+            </ListItem>
+            <ListItem disablePadding>
+              <ListItemButton component={Link} to="/pipelines">
+                <ListItemIcon><AccountTree /></ListItemIcon>
+                <ListItemText primary="Pipelines" />
+              </ListItemButton>
+            </ListItem>
+            <ListItem disablePadding>
+              <ListItemButton component={Link} to="/modules">
+                <ListItemIcon><Extension /></ListItemIcon>
+                <ListItemText primary="Modules" />
+              </ListItemButton>
+            </ListItem>
+            <ListItem disablePadding>
+              <ListItemButton component={Link} to="/variables">
+                <ListItemIcon><Settings /></ListItemIcon>
+                <ListItemText primary="Variables" />
+              </ListItemButton>
+            </ListItem>
           </List>
         </Box>
       </Drawer>
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
-        <Outlet />
+        {children}
       </Box>
     </Box>
   );
