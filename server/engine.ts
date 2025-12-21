@@ -66,20 +66,35 @@ export async function listPipelines(): Promise<Pipeline[]> {
 }
 
 import { pubsub } from "./pubsub.ts";
+import { finishRun } from "./db.ts";
 
-// Track running pipelines with AbortController for cancellation
-const runningPipelines = new Map<string, AbortController>();
+// Track running pipelines with AbortController and run info for cancellation
+interface RunningPipeline {
+  controller: AbortController;
+  dbRunId: number;
+  runId: string;
+  logBuffer: string;
+  startTime: number;
+}
+
+const runningPipelines = new Map<string, RunningPipeline>();
 
 export function getActivePipelines(): string[] {
   return Array.from(runningPipelines.keys());
 }
 
 export function stopPipeline(id: string): boolean {
-  const controller = runningPipelines.get(id);
-  if (controller) {
-    controller.abort();
+  const running = runningPipelines.get(id);
+  if (running) {
+    running.controller.abort();
+    
+    // Save cancellation to DB
+    const duration = Date.now() - running.startTime;
+    const logContent = running.logBuffer + `\n[${new Date().toISOString()}] Pipeline stopped by user.\n`;
+    finishRun(running.dbRunId, "cancelled", logContent, duration);
+    
     runningPipelines.delete(id);
-    pubsub.publish({ type: "end", pipelineId: id, payload: { runId: "cancelled", success: false } });
+    pubsub.publish({ type: "end", pipelineId: id, payload: { runId: running.runId, success: false } });
     return true;
   }
   return false;
@@ -90,20 +105,28 @@ export async function runPipeline(id: string) {
     throw new Error(`Pipeline ${id} is already running`);
   }
 
-  const controller = new AbortController();
-  runningPipelines.set(id, controller);
-
   const pipeline = await loadPipeline(id);
   if (!pipeline) {
-    runningPipelines.delete(id);
     throw new Error(`Pipeline ${id} not found`);
   }
 
   console.log(`[Engine] Starting pipeline: ${pipeline.name} (${id})`);
 
+  const controller = new AbortController();
   const runId = String(Date.now());
   const dbRunId = startRun(id, runId); // Create run record in DB
+  const startTime = Date.now();
   let logBuffer = `Pipeline: ${pipeline.name}\nRun ID: ${runId}\nStarted: ${new Date().toISOString()}\n\n`;
+
+  // Store running pipeline info for cancellation support
+  const runningInfo: RunningPipeline = {
+    controller,
+    dbRunId,
+    runId,
+    logBuffer,
+    startTime,
+  };
+  runningPipelines.set(id, runningInfo);
 
   // Notify start
   pubsub.publish({ type: "start", pipelineId: id, payload: { runId } });
@@ -112,6 +135,7 @@ export async function runPipeline(id: string) {
     console.log(msg);
     const ts = new Date().toISOString();
     logBuffer += `[${ts}] ${msg}\n`;
+    runningInfo.logBuffer = logBuffer; // Keep reference updated for stop
     // Notify log
     pubsub.publish({ type: "log", pipelineId: id, payload: { runId, msg, ts } });
   };
@@ -127,8 +151,9 @@ export async function runPipeline(id: string) {
     results: {} as Record<string, any>,
     prev: null, // Result of previous step, accessible via ${prev}
     pipelineId: id,
-    startTime: Date.now(),
-    log: log // Allow modules to log?
+    startTime,
+    log: log, // Allow modules to log?
+    signal: controller.signal, // AbortSignal for cancellation
   };
 
   // Helper deep interpolation function

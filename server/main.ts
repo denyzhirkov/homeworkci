@@ -96,7 +96,8 @@ app.get("/api/pipelines/:id", async (c) => {
   const id = c.req.param("id");
   const p = await loadPipeline(id);
   if (!p) return c.json({ error: "Not found" }, 404);
-  return c.json({ ...p, isDemo: isDemoPipeline(id) });
+  const active = getActivePipelines();
+  return c.json({ ...p, isDemo: isDemoPipeline(id), isRunning: active.includes(id) });
 });
 
 import { v4 as uuidv4 } from "uuid";

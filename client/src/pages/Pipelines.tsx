@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { PlayArrow, Schedule } from "@mui/icons-material";
+import { PlayArrow, Schedule, Stop } from "@mui/icons-material";
 import {
   Box, Typography, Button, Card, CardContent, CardActions,
   Grid, Chip, Stack, Container, CircularProgress
 } from "@mui/material";
-import { getPipelines, type Pipeline, runPipeline } from "../lib/api";
+import { getPipelines, type Pipeline, runPipeline, stopPipeline } from "../lib/api";
 import { useWebSocket, type WSEvent } from "../lib/useWebSocket";
 import { LiveLogChip } from "../components/LiveLogChip";
 
@@ -58,6 +58,16 @@ export default function Pipelines() {
       // No need to refetch - WebSocket will update the state
     } catch (err) {
       console.error("Error triggering pipeline:", err);
+    }
+  };
+
+  const handleStop = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await stopPipeline(id);
+    } catch (err) {
+      console.error("Error stopping pipeline:", err);
     }
   };
 
@@ -130,7 +140,7 @@ export default function Pipelines() {
                 {p.isRunning && <LiveLogChip pipelineId={p.id} />}
               </CardContent>
               <CardActions disableSpacing sx={{ justifyContent: 'flex-end', borderTop: '1px solid #eee' }}>
-                {!p.isRunning && (
+                {!p.isRunning ? (
                   <Button
                     size="small"
                     color="success"
@@ -139,9 +149,16 @@ export default function Pipelines() {
                   >
                     Run Now
                   </Button>
-                )}
-                {p.isRunning && (
-                  <Chip size="small" icon={<CircularProgress size={12} />} label="Running..." color="success" />
+                ) : (
+                  <Button
+                    size="small"
+                    color="error"
+                    variant="contained"
+                    startIcon={<Stop />}
+                    onClick={(e) => handleStop(e, p.id)}
+                  >
+                    Stop
+                  </Button>
                 )}
               </CardActions>
             </Card>

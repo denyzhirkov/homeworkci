@@ -23,6 +23,20 @@ export async function run(ctx: any, params: { cmd: string }) {
 
   const process = command.spawn();
 
+  // Handle abort signal - kill process when pipeline is stopped
+  const abortHandler = () => {
+    if (ctx.log) ctx.log(`[Shell] Process killed by user`);
+    try {
+      process.kill("SIGTERM");
+    } catch {
+      // Process may have already exited
+    }
+  };
+
+  if (ctx.signal) {
+    ctx.signal.addEventListener("abort", abortHandler, { once: true });
+  }
+
   // Helper to stream output
   const streamOutput = async (readable: ReadableStream<Uint8Array>, prefix: string = "") => {
     const reader = readable.pipeThrough(new TextDecoderStream()).getReader();
@@ -30,31 +44,54 @@ export async function run(ctx: any, params: { cmd: string }) {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        // value can be partial lines, but for simplicity let's log chunks or split lines
-        // For better UX, splitting by line is preferred, but simple chunk logging works for "tailing"
         if (ctx.log) {
-          // Basic line buffering could be improved, but direct logging is safe enough for now
           const lines = value.split('\n');
           for (const line of lines) {
-            if (line) ctx.log(line);
+            if (line) ctx.log(prefix + line);
           }
         }
       }
+    } catch (e: any) {
+      // Ignore read errors if aborted
+      if (ctx.signal?.aborted) return;
+      throw e;
     } finally {
       reader.releaseLock();
     }
   };
 
-  await Promise.all([
-    streamOutput(process.stdout),
-    streamOutput(process.stderr, "[ERR] "),
-  ]);
+  try {
+    await Promise.all([
+      streamOutput(process.stdout),
+      streamOutput(process.stderr, "[ERR] "),
+    ]);
 
-  const status = await process.status;
+    const status = await process.status;
 
-  if (!status.success) {
-    throw new Error(`Command failed with code ${status.code}`);
+    // Remove abort listener if process finished normally
+    if (ctx.signal) {
+      ctx.signal.removeEventListener("abort", abortHandler);
+    }
+
+    // Check if we were aborted
+    if (ctx.signal?.aborted) {
+      throw new Error("Pipeline stopped by user");
+    }
+
+    if (!status.success) {
+      throw new Error(`Command failed with code ${status.code}`);
+    }
+
+    return { code: status.code };
+  } catch (e: any) {
+    // Remove abort listener on error
+    if (ctx.signal) {
+      ctx.signal.removeEventListener("abort", abortHandler);
+    }
+    
+    if (ctx.signal?.aborted) {
+      throw new Error("Pipeline stopped by user");
+    }
+    throw e;
   }
-
-  return { code: status.code };
 }
