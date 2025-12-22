@@ -1,22 +1,7 @@
 // Centralized configuration for HomeworkCI server
 // All settings can be overridden via environment variables
 
-function getEnv(key: string, defaultValue: string): string {
-  return Deno.env.get(key) || defaultValue;
-}
-
-function getEnvInt(key: string, defaultValue: number): number {
-  const value = Deno.env.get(key);
-  if (!value) return defaultValue;
-  const parsed = parseInt(value, 10);
-  return isNaN(parsed) ? defaultValue : parsed;
-}
-
-function getEnvBool(key: string, defaultValue: boolean): boolean {
-  const value = Deno.env.get(key);
-  if (!value) return defaultValue;
-  return value.toLowerCase() === "true" || value === "1";
-}
+import { getEnv, getEnvInt, getEnvBool } from "./utils/env.ts";
 
 export const config = {
   // --- Directories ---
@@ -68,4 +53,3 @@ export function logConfig(): void {
     console.log(`  DOCKER_TIMEOUT_MS: ${config.dockerTimeoutMs}`);
   }
 }
-

@@ -416,6 +416,8 @@ export async function stopPersistentContainer(pipelineId: string, runId: string)
   const runKey = `${pipelineId}:${runId}`;
   const containerName = persistentContainers.get(runKey);
   
+  console.log(`[Docker] Stopping persistent container for ${runKey}, found: ${containerName || "none"}`);
+  
   if (containerName) {
     try {
       // Stop container
@@ -425,6 +427,7 @@ export async function stopPersistentContainer(pipelineId: string, runId: string)
         stderr: "null",
       });
       await stopCmd.output();
+      console.log(`[Docker] Stopped container: ${containerName}`);
     } catch { /* ignore */ }
 
     try {
@@ -435,6 +438,7 @@ export async function stopPersistentContainer(pipelineId: string, runId: string)
         stderr: "null",
       });
       await rmCmd.output();
+      console.log(`[Docker] Removed container: ${containerName}`);
     } catch { /* ignore */ }
 
     persistentContainers.delete(runKey);

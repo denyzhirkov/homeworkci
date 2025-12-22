@@ -15,7 +15,7 @@ import { useWebSocket, type WSEvent } from "../lib/useWebSocket";
 type RunEntry = {
   pipelineId: string;
   runId: string;
-  status: "success" | "fail" | "running";
+  status: "success" | "fail" | "running" | "cancelled";
 };
 
 export default function PipelineDetail() {

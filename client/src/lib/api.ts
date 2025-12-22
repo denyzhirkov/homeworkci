@@ -1,6 +1,9 @@
-// API base URL - defaults to /api for production (nginx proxy)
-// Can be overridden via VITE_API_BASE env var for development
-const API_BASE = import.meta.env.VITE_API_BASE || "/api";
+// API functions for HomeworkCI client
+// Uses the base api-client for all requests
+
+import { api, API_BASE } from "./api-client";
+
+// --- Types ---
 
 export interface Pipeline {
   id: string;
@@ -8,62 +11,17 @@ export interface Pipeline {
   description?: string;
   schedule?: string;
   env?: string;
-  steps: {
-    name?: string; // Step name for results reference via ${results.name}
-    description?: string;
-    module: string;
-    params?: any;
-    parallel?: string; // Group name for parallel execution
-  }[];
+  steps: PipelineStep[];
   isRunning?: boolean;
-  isDemo?: boolean; // Read-only demo pipeline
+  isDemo?: boolean;
 }
 
-export async function getPipelines(): Promise<Pipeline[]> {
-  const res = await fetch(`${API_BASE}/pipelines`);
-  return res.json();
-}
-
-export async function getPipeline(id: string): Promise<Pipeline> {
-  const res = await fetch(`${API_BASE}/pipelines/${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error("Pipeline not found");
-  return res.json();
-}
-export async function createPipeline(pipeline: any): Promise<{ id: string }> {
-  const res = await fetch(`${API_BASE}/pipelines`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(pipeline),
-  });
-  if (!res.ok) throw new Error("Failed to create");
-  return res.json();
-}
-
-export async function savePipeline(id: string, pipeline: any) {
-  const res = await fetch(`${API_BASE}/pipelines/${encodeURIComponent(id)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(pipeline),
-  });
-  if (!res.ok) throw new Error("Failed to save");
-}
-
-export async function runPipeline(id: string) {
-  const res = await fetch(`${API_BASE}/pipelines/${encodeURIComponent(id)}/run`, { method: "POST" });
-  if (!res.ok) throw new Error("Failed to run");
-  return res.json();
-}
-
-export async function stopPipeline(id: string) {
-  const res = await fetch(`${API_BASE}/pipelines/${encodeURIComponent(id)}/stop`, { method: "POST" });
-  if (!res.ok) throw new Error("Failed to stop");
-  return res.json();
-}
-
-export async function deletePipeline(id: string) {
-  const res = await fetch(`${API_BASE}/pipelines/${encodeURIComponent(id)}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Failed to delete");
-  return res.json();
+export interface PipelineStep {
+  name?: string;
+  description?: string;
+  module: string;
+  params?: Record<string, unknown>;
+  parallel?: string;
 }
 
 export interface ModuleInfo {
@@ -73,67 +31,99 @@ export interface ModuleInfo {
   isBuiltIn?: boolean;
 }
 
-export async function getModules(): Promise<ModuleInfo[]> {
-  const res = await fetch(`${API_BASE}/modules`);
-  return res.json();
-}
-
 export interface ModuleDetails {
   source: string;
   isBuiltIn: boolean;
 }
 
-export async function getModuleDetails(id: string): Promise<ModuleDetails> {
-  const res = await fetch(`${API_BASE}/modules/${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error("Module not found");
-  return res.json();
+export interface RunResult {
+  success: boolean;
+  duration: number;
+  runId: string;
+  workDir: string | null;
 }
 
-export async function saveModule(id: string, content: string) {
-  const res = await fetch(`${API_BASE}/modules/${encodeURIComponent(id)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source: content }),
-  });
-  if (!res.ok) throw new Error("Failed to save");
+export interface RunHistoryEntry {
+  pipelineId: string;
+  runId: string;
+  status: "success" | "fail" | "running" | "cancelled";
+  duration?: number;
+  startedAt?: number;
 }
 
-export async function deleteModule(id: string) {
-  const res = await fetch(`${API_BASE}/modules/${encodeURIComponent(id)}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Failed to delete module");
-  return res.json();
+export interface SystemStats {
+  platform: string;
+  denoVersion: string;
+  appVersion: string;
+  pipelinesCount: number;
+  modulesCount: number;
+  uptime: number;
 }
 
-export async function getVariables() {
-  const res = await fetch(`${API_BASE}/variables`);
-  if (!res.ok) throw new Error("Failed to fetch variables");
-  return res.json();
+// --- Pipelines ---
+
+export const getPipelines = () => 
+  api.get<Pipeline[]>("/pipelines");
+
+export const getPipeline = (id: string) => 
+  api.get<Pipeline>(`/pipelines/${encodeURIComponent(id)}`);
+
+export const createPipeline = (pipeline: Omit<Pipeline, "id">) => 
+  api.post<{ success: boolean; id: string }>("/pipelines", pipeline);
+
+export const savePipeline = (id: string, pipeline: Omit<Pipeline, "id">) => 
+  api.post<{ success: boolean; id: string }>(`/pipelines/${encodeURIComponent(id)}`, pipeline);
+
+export const deletePipeline = (id: string) => 
+  api.delete<{ success: boolean }>(`/pipelines/${encodeURIComponent(id)}`);
+
+export const runPipeline = (id: string) => 
+  api.post<RunResult>(`/pipelines/${encodeURIComponent(id)}/run`);
+
+export const stopPipeline = (id: string) => 
+  api.post<{ success: boolean }>(`/pipelines/${encodeURIComponent(id)}/stop`);
+
+// --- Run History ---
+
+export const getRunHistory = (pipelineId: string) => 
+  api.get<RunHistoryEntry[]>(`/pipelines/${encodeURIComponent(pipelineId)}/runs`);
+
+export async function getRunLog(pipelineId: string, runId: string): Promise<string> {
+  const response = await fetch(
+    `${API_BASE}/pipelines/${encodeURIComponent(pipelineId)}/runs/${runId}`
+  );
+  if (!response.ok) throw new Error("Failed to fetch log");
+  return response.text();
 }
 
-export async function getStats() {
-  const res = await fetch(`${API_BASE}/stats`);
-  if (!res.ok) throw new Error("Failed to fetch stats");
-  return res.json();
+// --- Modules ---
+
+export const getModules = () => 
+  api.get<ModuleInfo[]>("/modules");
+
+export const getModuleDetails = (id: string) => 
+  api.get<ModuleDetails>(`/modules/${encodeURIComponent(id)}`);
+
+export const saveModule = (id: string, source: string) => 
+  api.post<{ success: boolean }>(`/modules/${encodeURIComponent(id)}`, { source });
+
+export const deleteModule = (id: string) => 
+  api.delete<{ success: boolean }>(`/modules/${encodeURIComponent(id)}`);
+
+// --- Variables ---
+
+export interface VariablesConfig {
+  global: Record<string, string>;
+  environments: Record<string, Record<string, string>>;
 }
 
-export async function saveVariables(vars: any) {
-  const res = await fetch(`${API_BASE}/variables`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(vars),
-  });
-  if (!res.ok) throw new Error("Failed to save variables");
-  return res.json();
-}
+export const getVariables = () => 
+  api.get<VariablesConfig>("/variables");
 
-export async function getRunHistory(pipelineId: string) {
-  const res = await fetch(`${API_BASE}/pipelines/${encodeURIComponent(pipelineId)}/runs`);
-  if (!res.ok) throw new Error("Failed to fetch history");
-  return res.json();
-}
+export const saveVariables = (vars: VariablesConfig) => 
+  api.post<{ success: boolean }>("/variables", vars);
 
-export async function getRunLog(pipelineId: string, runId: string) {
-  const res = await fetch(`${API_BASE}/pipelines/${encodeURIComponent(pipelineId)}/runs/${runId}`);
-  if (!res.ok) throw new Error("Failed to fetch log");
-  return res.text();
-}
+// --- Stats ---
+
+export const getStats = () => 
+  api.get<SystemStats>("/stats");

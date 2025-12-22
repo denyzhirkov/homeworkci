@@ -1,6 +1,7 @@
 {
-  "name": "homeworkci",
+  "name": "@homeworkci/server",
   "version": "1.0.0",
+  "exports": "./server/main.ts",
   "tasks": {
     "start": "deno run -A --watch server/main.ts",
     "dev:client": "cd client && npm run dev",

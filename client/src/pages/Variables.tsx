@@ -4,12 +4,7 @@ import {
   Divider, Container, CircularProgress
 } from "@mui/material";
 import { Save, Add, Delete } from "@mui/icons-material";
-import { getVariables, saveVariables } from "../lib/api";
-
-type VariablesConfig = {
-  global: Record<string, string>;
-  environments: Record<string, Record<string, string>>;
-};
+import { getVariables, saveVariables, type VariablesConfig } from "../lib/api";
 
 export default function Variables() {
   const [config, setConfig] = useState<VariablesConfig>({ global: {}, environments: {} });
