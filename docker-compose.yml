@@ -17,8 +17,16 @@ services:
       - DATA_DIR=/app/data
       - CONFIG_DIR=/app/config
       - SANDBOX_DIR=/app/tmp
+      - SANDBOX_HOST_PATH=${SANDBOX_HOST_PATH:-/tmp/homeworkci}
       - SANDBOX_MAX_AGE_HOURS=${SANDBOX_MAX_AGE_HOURS:-24}
       - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
+      # Docker Runner settings
+      - DOCKER_ENABLED=${DOCKER_ENABLED:-false}
+      - DOCKER_DEFAULT_IMAGE=${DOCKER_DEFAULT_IMAGE:-alpine:3.19}
+      - DOCKER_MEMORY_LIMIT=${DOCKER_MEMORY_LIMIT:-512m}
+      - DOCKER_CPU_LIMIT=${DOCKER_CPU_LIMIT:-1}
+      - DOCKER_NETWORK_DEFAULT=${DOCKER_NETWORK_DEFAULT:-bridge}
+      - DOCKER_TIMEOUT_MS=${DOCKER_TIMEOUT_MS:-600000}
     volumes:
       # Persistent data
       - homeworkci-data:/app/data
@@ -26,13 +34,16 @@ services:
       # Editable content (can be mounted from host for development)
       - homeworkci-pipelines:/app/pipelines
       - homeworkci-modules:/app/modules
-      # Temporary sandbox (can use tmpfs for better performance)
-      - homeworkci-tmp:/app/tmp
+      # Temporary sandbox - bind mount for Docker-in-Docker access
+      # Docker containers spawned from server need host path access
+      - ${SANDBOX_HOST_PATH:-/tmp/homeworkci}:/app/tmp
+      # Docker socket for Docker-in-Docker (required for docker module)
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Run as root for Docker socket access (required for docker module)
+    # Security note: Docker-in-Docker inherently requires elevated privileges
+    user: root
     networks:
       - homeworkci-network
-    # Uncomment for Docker-in-Docker support (future feature)
-    # volumes:
-    #   - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
       test:
         [
@@ -89,6 +100,4 @@ volumes:
   homeworkci-pipelines:
     driver: local
   homeworkci-modules:
-    driver: local
-  homeworkci-tmp:
     driver: local

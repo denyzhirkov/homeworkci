@@ -1,76 +1,257 @@
 # HomeworkCI
 
-Minimalist CI/CD home server built with Deno and React.
+Minimalist self-hosted CI/CD server built with Deno and React. Define pipelines in JSON, execute shell commands, HTTP requests, Git operations, or run steps in isolated Docker containers.
 
 ## Features
 
-- **Pipeline Automation**: Define pipelines in JSON.
-- **Custom Modules**: Write steps in TypeScript (`modules/*.ts`).
-- **Scheduling**: Cron-based pipeline execution.
-- **Sandboxed Execution**: Each pipeline run gets an isolated working directory.
-- **Web UI**: Managed via a React + Material UI frontend.
-- **Single Runtime**: Backend runs on Deno.
-- **Docker Ready**: Deploy with Docker Compose.
+- **JSON Pipelines** — Define automation workflows in simple JSON format
+- **Modular Steps** — Built-in modules: shell, docker, http, git, fs, delay
+- **Docker Runner** — Execute steps in isolated Docker containers with resource limits
+- **Parallel Execution** — Run multiple steps simultaneously
+- **Variable Interpolation** — Access step results via `${results.stepName}` and `${prev}`
+- **Sandboxed Execution** — Each pipeline run gets an isolated working directory
+- **Cron Scheduling** — Schedule pipelines with cron expressions
+- **Real-time Logs** — WebSocket-based live log streaming
+- **Web UI** — Modern React + Material UI interface
+- **Docker Ready** — Deploy with Docker Compose
+
+## Quick Start
+
+### Docker (Recommended)
+
+```bash
+# Clone and start
+git clone <repo-url> homeworkci
+cd homeworkci
+docker compose up -d --build
+
+# Open http://localhost:80
+```
+
+### Local Development
+
+Prerequisites: [Deno](https://deno.land/) v2.0+, [Node.js](https://nodejs.org/) v20+
+
+```bash
+# Start backend
+deno task start
+
+# In another terminal - start frontend dev server
+cd client && npm install && npm run dev
+
+# Open http://localhost:5173
+```
 
 ## Project Structure
 
 ```
-├── server/         # Deno backend (Hono server, pipeline engine)
-├── client/         # React frontend (Vite, MUI)
-├── pipelines/      # JSON pipeline definitions
-├── modules/        # TypeScript modules for pipeline steps
-├── docker/         # Docker configuration files
-├── config/         # Runtime configuration (variables.json)
-└── data/           # SQLite database
+homeworkci/
+├── server/           # Deno backend (Hono, pipeline engine)
+├── client/           # React frontend (Vite, Material UI)
+├── modules/          # Pipeline step modules (TypeScript)
+├── pipelines/        # Pipeline definitions (JSON)
+├── config/           # Runtime configuration
+├── docker/           # Dockerfiles and nginx config
+└── data/             # SQLite database
 ```
 
-## Getting Started
+## Pipeline Configuration
 
-### Prerequisites
+Pipelines are JSON files in the `pipelines/` directory:
 
-- [Deno](https://deno.land/) v2.0+ (tested with v2.1.4)
-- [Node.js](https://nodejs.org/) v20+ (for frontend build)
-
-### Running Locally
-
-Start the backend server (API + static frontend serving):
-
-```bash
-deno task start
+```json
+{
+  "name": "My Pipeline",
+  "description": "Optional description",
+  "schedule": "0 */6 * * *",
+  "env": "production",
+  "keepWorkDir": false,
+  "steps": [
+    {
+      "name": "step_name",
+      "description": "What this step does",
+      "module": "shell",
+      "params": {
+        "cmd": "echo 'Hello World'"
+      }
+    }
+  ]
+}
 ```
 
-The server will be available at [http://localhost:8008](http://localhost:8008).
+### Pipeline Options
 
-### Developing the Frontend
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Pipeline display name |
+| `description` | string | Optional description |
+| `schedule` | string | Cron expression for scheduled runs |
+| `env` | string | Environment name from `config/variables.json` |
+| `keepWorkDir` | boolean | Keep sandbox directory after completion (debugging) |
+| `steps` | array | Array of step objects |
 
-To work on the UI with hot-reload:
+### Step Options
 
-```bash
-cd client
-npm install
-npm run dev
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Step name (used for `${results.name}`) |
+| `description` | string | Step description |
+| `module` | string | Module to execute: `shell`, `docker`, `http`, `git`, `fs`, `delay` |
+| `params` | object | Module-specific parameters |
+| `parallel` | string | Group name for parallel execution |
+
+### Variable Interpolation
+
+Access data from previous steps in parameters:
+
+- `${prev}` — Result of the previous step
+- `${results.stepName}` — Result of a named step
+- `${results.stepName.field}` — Nested field access
+- `${env.VAR_NAME}` — Environment variable
+
+## Modules
+
+### shell
+
+Execute shell commands in the sandbox directory.
+
+```json
+{
+  "module": "shell",
+  "params": {
+    "cmd": "npm install && npm test"
+  }
+}
 ```
 
-To build the frontend for production:
+### docker
 
-```bash
-cd client
-npm run build
+Run commands in isolated Docker containers. Requires `DOCKER_ENABLED=true`.
+
+```json
+{
+  "module": "docker",
+  "params": {
+    "image": "node:20-alpine",
+    "cmd": "npm test",
+    "workdir": "/workspace",
+    "network": "bridge",
+    "memory": "512m",
+    "cpus": "1",
+    "reuse": false,
+    "removeImage": false
+  }
+}
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `image` | `alpine:3.19` | Docker image |
+| `cmd` | required | Command to execute |
+| `workdir` | `/workspace` | Working directory in container |
+| `network` | `bridge` | Network mode: `none`, `bridge`, `host` |
+| `memory` | `512m` | Memory limit |
+| `cpus` | `1` | CPU limit |
+| `reuse` | `false` | Reuse container for all steps with `reuse: true` |
+| `removeImage` | `false` | Remove image after execution |
+
+**Reuse Mode:** When `reuse: true`, a persistent container is started on the first step and reused for subsequent steps. Installed packages and files persist between steps.
+
+### http
+
+Make HTTP requests.
+
+```json
+{
+  "module": "http",
+  "params": {
+    "url": "https://api.example.com/webhook",
+    "method": "POST",
+    "body": { "status": "success" }
+  }
+}
+```
+
+### git
+
+Git operations.
+
+```json
+{
+  "module": "git",
+  "params": {
+    "op": "clone",
+    "repo": "https://github.com/user/repo.git",
+    "dir": "./repo"
+  }
+}
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `op` | Operation: `clone` or `pull` |
+| `repo` | Repository URL (for clone) |
+| `dir` | Target directory |
+
+### fs
+
+File system operations.
+
+```json
+{
+  "module": "fs",
+  "params": {
+    "op": "read",
+    "path": "./config.json"
+  }
+}
+```
+
+```json
+{
+  "module": "fs",
+  "params": {
+    "op": "write",
+    "path": "./output.txt",
+    "content": "Hello World"
+  }
+}
+```
+
+### delay
+
+Wait for a specified time.
+
+```json
+{
+  "module": "delay",
+  "params": {
+    "ms": 5000
+  }
+}
+```
+
+## Parallel Execution
+
+Steps with the same `parallel` value execute simultaneously:
+
+```json
+{
+  "steps": [
+    { "module": "http", "params": { "url": "..." }, "parallel": "fetch" },
+    { "module": "http", "params": { "url": "..." }, "parallel": "fetch" },
+    { "module": "http", "params": { "url": "..." }, "parallel": "fetch" },
+    { "module": "shell", "params": { "cmd": "echo 'All fetched!'" } }
+  ]
+}
 ```
 
 ## Docker Deployment
 
-### Quick Start
+### Basic Setup
 
 ```bash
-# Build and run
 docker compose up -d --build
-
-# View logs
-docker compose logs -f
-
-# Stop
-docker compose down
 ```
 
 ### With Custom Configuration
@@ -79,37 +260,146 @@ docker compose down
 # Copy example config
 cp env.example .env
 
-# Edit .env as needed
+# Edit settings
 nano .env
 
-# Start with custom config
+# Start
 docker compose up -d
 ```
 
-### Environment Variables
+### Enable Docker Runner
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `8008` | Internal server port |
-| `CLIENT_PORT` | `80` | External web interface port |
-| `SANDBOX_MAX_AGE_HOURS` | `24` | Sandbox directory lifetime |
-| `ENABLE_SCHEDULER` | `true` | Enable cron scheduler |
+To run pipeline steps in Docker containers:
 
-### Development with Docker
+```bash
+# Create sandbox directory on host
+mkdir -p /tmp/homeworkci
+
+# Set environment variables
+echo "DOCKER_ENABLED=true" >> .env
+echo "SANDBOX_HOST_PATH=/tmp/homeworkci" >> .env
+
+# Restart
+docker compose up -d --build
+```
+
+### Development Mode
+
+Mount local directories for live code changes:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
-## Configuration
+## Environment Variables
 
-Environment variables can be set in `.env` file or passed directly:
+### Server
 
-- `PIPELINES_DIR` - Path to pipeline definitions
-- `MODULES_DIR` - Path to step modules  
-- `DATA_DIR` - Path to SQLite database
-- `CONFIG_DIR` - Path to configuration files
-- `SANDBOX_DIR` - Path to temporary sandbox directories
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8008` | Internal server port |
+| `HOST` | `0.0.0.0` | Server bind address |
+| `ENABLE_SCHEDULER` | `true` | Enable cron scheduler |
+| `SANDBOX_MAX_AGE_HOURS` | `24` | Sandbox cleanup age |
+
+### Directories
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PIPELINES_DIR` | `./pipelines` | Pipeline definitions |
+| `MODULES_DIR` | `./modules` | Step modules |
+| `DATA_DIR` | `./data` | SQLite database |
+| `CONFIG_DIR` | `./config` | Configuration files |
+| `SANDBOX_DIR` | `./tmp` | Temporary directories |
+
+### Docker Runner
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DOCKER_ENABLED` | `false` | Enable Docker module |
+| `SANDBOX_HOST_PATH` | — | Host path for sandbox (Docker-in-Docker) |
+| `DOCKER_DEFAULT_IMAGE` | `alpine:3.19` | Default container image |
+| `DOCKER_MEMORY_LIMIT` | `512m` | Default memory limit |
+| `DOCKER_CPU_LIMIT` | `1` | Default CPU limit |
+| `DOCKER_NETWORK_DEFAULT` | `bridge` | Default network mode |
+| `DOCKER_TIMEOUT_MS` | `600000` | Container timeout (10 min) |
+
+### Client
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLIENT_PORT` | `80` | External web interface port |
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/pipelines` | List all pipelines |
+| `POST` | `/api/pipelines` | Create pipeline |
+| `GET` | `/api/pipelines/:id` | Get pipeline |
+| `PUT` | `/api/pipelines/:id` | Update pipeline |
+| `DELETE` | `/api/pipelines/:id` | Delete pipeline |
+| `POST` | `/api/pipelines/:id/run` | Run pipeline |
+| `POST` | `/api/pipelines/:id/stop` | Stop running pipeline |
+| `GET` | `/api/pipelines/:id/runs` | Get pipeline runs |
+| `GET` | `/api/modules` | List available modules |
+| `GET` | `/api/modules/:name` | Get module info |
+| `GET` | `/api/variables` | Get global variables |
+| `POST` | `/api/variables` | Update global variables |
+| `GET` | `/api/environments` | List environments |
+| `WS` | `/api/ws` | WebSocket for live logs |
+
+## Commands Reference
+
+### Local Development
+
+```bash
+# Start server
+deno task start
+
+# Start frontend dev server
+cd client && npm run dev
+
+# Build frontend
+cd client && npm run build
+
+# Run linter
+deno lint
+```
+
+### Docker
+
+```bash
+# Build and start
+docker compose up -d --build
+
+# View logs
+docker compose logs -f
+docker compose logs -f server
+
+# Stop
+docker compose down
+
+# Stop and remove volumes
+docker compose down -v
+
+# Rebuild single service
+docker compose up -d --build server
+
+# Development mode
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
+### Maintenance
+
+```bash
+# Manual sandbox cleanup
+curl -X POST http://localhost:8008/api/sandbox/cleanup
+
+# Check health
+curl http://localhost:8008/api/health
+```
 
 ## License
 

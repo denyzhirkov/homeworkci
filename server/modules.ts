@@ -11,7 +11,7 @@ export interface StepModule {
   run: (ctx: any, params: any) => Promise<any>;
 }
 
-const DEFAULT_MODULES = ["shell", "http", "git", "fs", "delay"];
+const DEFAULT_MODULES = ["shell", "http", "git", "fs", "delay", "docker"];
 
 export function isBuiltInModule(name: string): boolean {
   return DEFAULT_MODULES.includes(name);

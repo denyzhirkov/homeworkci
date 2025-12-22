@@ -8,7 +8,7 @@ LABEL description="HomeworkCI Pipeline Server"
 
 WORKDIR /app
 
-# Install common CI/CD utilities
+# Install common CI/CD utilities and Docker CLI
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
@@ -21,11 +21,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     unzip \
     zip \
+    gnupg \
+    lsb-release \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Docker CLI (for docker module)
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends docker-ce-cli && \
+    rm -rf /var/lib/apt/lists/*
+
 # Create non-root user for security (using Debian commands)
+# Add user to docker group for Docker socket access
 RUN groupadd --system --gid 1001 homeworkci && \
-    useradd --system --uid 1001 --gid homeworkci --shell /bin/false homeworkci
+    useradd --system --uid 1001 --gid homeworkci --shell /bin/false homeworkci && \
+    usermod -aG docker homeworkci 2>/dev/null || true
 
 # Create DENO_DIR inside app for proper permissions
 ENV DENO_DIR=/app/.deno
@@ -82,7 +93,13 @@ ENV PORT=8008 \
     CONFIG_DIR=/app/config \
     SANDBOX_DIR=/app/tmp \
     SANDBOX_MAX_AGE_HOURS=24 \
-    ENABLE_SCHEDULER=true
+    ENABLE_SCHEDULER=true \
+    DOCKER_ENABLED=false \
+    DOCKER_DEFAULT_IMAGE=alpine:3.19 \
+    DOCKER_MEMORY_LIMIT=512m \
+    DOCKER_CPU_LIMIT=1 \
+    DOCKER_NETWORK_DEFAULT=bridge \
+    DOCKER_TIMEOUT_MS=600000
 
 # Use entrypoint to initialize volumes
 ENTRYPOINT ["/entrypoint.sh"]

@@ -4,6 +4,7 @@ import { loadModule } from "./modules.ts";
 import { getMergedEnv } from "./variables.ts";
 import { startRun, saveLog, startStep, endStep } from "./logger.ts";
 import { config } from "./config.ts";
+import { killContainersForRun, stopPersistentContainer } from "./docker-manager.ts";
 
 // Secure pipeline context interface - strictly typed
 export interface PipelineContext {
@@ -60,7 +61,7 @@ await ensureDir(PIPELINES_DIR);
 await ensureDir(SANDBOX_DIR);
 
 // Demo pipelines are read-only
-const DEMO_PIPELINES = ["demo"];
+const DEMO_PIPELINES = ["demo", "docker-demo"];
 
 // --- Sandbox Directory Management ---
 
@@ -206,6 +207,14 @@ export async function stopPipeline(id: string): Promise<boolean> {
   const running = runningPipelines.get(id);
   if (running) {
     running.controller.abort();
+
+    // Kill any Docker containers for this run
+    if (config.dockerEnabled) {
+      const killed = await killContainersForRun(id, running.runId);
+      if (killed > 0) {
+        console.log(`[Docker] Killed ${killed} container(s) for pipeline ${id}`);
+      }
+    }
 
     // Cleanup sandbox directory unless keepWorkDir is set
     if (!running.keepWorkDir) {
@@ -466,6 +475,11 @@ export async function runPipeline(id: string) {
     const errorMsg = e?.message || String(e);
     log(`Pipeline failed: ${errorMsg}`);
   } finally {
+    // Stop persistent Docker container if used
+    if (config.dockerEnabled) {
+      await stopPersistentContainer(id, runId);
+    }
+
     // Cleanup sandbox directory unless keepWorkDir is set
     if (!pipeline.keepWorkDir) {
       await cleanupSandbox(sandboxPath, log);

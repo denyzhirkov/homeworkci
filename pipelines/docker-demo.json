@@ -1,0 +1,89 @@
+{
+  "name": "Docker Demo",
+  "description": "Demonstrates Docker module: running commands in isolated containers with different images and settings.",
+  "steps": [
+    {
+      "name": "alpine_hello",
+      "description": "Simple command in Alpine container",
+      "module": "docker",
+      "params": {
+        "image": "alpine:3.19",
+        "cmd": "echo '🐳 Hello from Alpine container!' && cat /etc/os-release | head -2"
+      }
+    },
+    {
+      "name": "reuse_step1",
+      "description": "Reusable container - Step 1: Install packages",
+      "module": "docker",
+      "params": {
+        "image": "alpine:3.19",
+        "cmd": "apk add --no-cache curl jq && echo '📦 Packages installed in persistent container'",
+        "reuse": true
+      }
+    },
+    {
+      "name": "reuse_step2",
+      "description": "Reusable container - Step 2: Use installed packages",
+      "module": "docker",
+      "params": {
+        "image": "alpine:3.19",
+        "cmd": "echo '🔄 Running in SAME container (packages still available):' && which curl && which jq && curl --version | head -1",
+        "reuse": true
+      }
+    },
+    {
+      "name": "reuse_step3",
+      "description": "Reusable container - Step 3: Create file",
+      "module": "docker",
+      "params": {
+        "image": "alpine:3.19",
+        "cmd": "echo 'Created in persistent container' > /tmp/persistent-test.txt && cat /tmp/persistent-test.txt",
+        "reuse": true
+      }
+    },
+    {
+      "name": "reuse_step4",
+      "description": "Reusable container - Step 4: Verify file still exists",
+      "module": "docker",
+      "params": {
+        "image": "alpine:3.19",
+        "cmd": "echo '✓ File from previous step:' && cat /tmp/persistent-test.txt",
+        "reuse": true
+      }
+    },
+    {
+      "name": "workspace_test",
+      "description": "Test workspace volume mount (new container)",
+      "module": "docker",
+      "params": {
+        "image": "alpine:3.19",
+        "cmd": "echo 'Hello from Docker' > /workspace/docker-test.txt && cat /workspace/docker-test.txt"
+      }
+    },
+    {
+      "description": "Verify file created by Docker container",
+      "module": "shell",
+      "params": {
+        "cmd": "echo '📁 Files in sandbox:' && ls -la && cat docker-test.txt"
+      }
+    },
+    {
+      "name": "isolated_network",
+      "description": "Container with no network access",
+      "module": "docker",
+      "params": {
+        "image": "alpine:3.19",
+        "cmd": "echo '🔒 Running in isolated network mode (no internet)' && ping -c 1 google.com 2>&1 || echo '✓ Network isolated as expected'",
+        "network": "none"
+      }
+    },
+    {
+      "description": "Pipeline complete",
+      "module": "shell",
+      "params": {
+        "cmd": "echo '✅ Docker demo completed! All containers ran successfully.'"
+      }
+    }
+  ]
+}
+
