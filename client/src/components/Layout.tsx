@@ -6,10 +6,18 @@ import {
   AccountTree, Extension, Settings, Home
 } from "@mui/icons-material";
 import { Link } from "react-router-dom";
+import { useWebSocket } from "../lib/useWebSocket";
 
 const drawerWidth = 240;
 
+// Empty handler to keep WebSocket connection alive across page transitions
+const noop = () => {};
+
 export default function Layout({ children }: { children: React.ReactNode }) {
+  // Keep WebSocket connection persistent - this ensures socket stays open
+  // when navigating between pages (Dashboard, Pipelines, Modules, Variables)
+  useWebSocket(noop);
+
   return (
     <Box sx={{ display: 'flex' }}>
       <CssBaseline />
