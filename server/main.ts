@@ -1,11 +1,12 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/deno";
 import { cors } from "hono/cors";
-import { listPipelines, loadPipeline, runPipeline, savePipeline, deletePipeline, getActivePipelines, stopPipeline, isDemoPipeline } from "./engine.ts";
+import { listPipelines, loadPipeline, runPipeline, savePipeline, deletePipeline, getActivePipelines, stopPipeline, isDemoPipeline, cleanupOldSandboxes } from "./engine.ts";
 import { listModules, loadModule, getModuleSource, saveModule, deleteModule, isBuiltInModule } from "./modules.ts";
 import { loadVariables, saveVariables } from "./variables.ts";
 import { getRunHistory, getRunLogWithStatus } from "./logger.ts";
 import { Scheduler } from "./scheduler.ts";
+import { config, logConfig } from "./config.ts";
 
 const app = new Hono();
 
@@ -18,8 +19,20 @@ app.use("*", async (c, next) => {
 // Enable CORS for frontend during dev (if separate port)
 app.use("/*", cors());
 
-const scheduler = new Scheduler();
-scheduler.start();
+// Start scheduler if enabled
+if (config.enableScheduler) {
+  const scheduler = new Scheduler();
+  scheduler.start();
+}
+
+// --- Health Check ---
+app.get("/api/health", (c) => {
+  return c.json({
+    status: "ok",
+    timestamp: Date.now(),
+    version: "1.0.0"
+  });
+});
 
 // --- Static Assets (Explicit) ---
 // Serve assets with higher priority to avoid fall-through to index.html
@@ -145,11 +158,25 @@ app.post("/api/pipelines/:id/run", async (c) => {
 app.post("/api/pipelines/:id/stop", async (c) => {
   const id = c.req.param("id");
   console.log(`[API] Stopping pipeline ${id}`);
-  const stopped = stopPipeline(id);
+  const stopped = await stopPipeline(id);
   if (stopped) {
     return c.json({ success: true });
   }
   return c.json({ error: "Pipeline not running" }, 400);
+});
+
+// --- Sandbox Cleanup API ---
+
+app.post("/api/sandbox/cleanup", async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const maxAgeMs = body.maxAgeMs ?? 24 * 60 * 60 * 1000; // Default 24 hours
+    const cleaned = await cleanupOldSandboxes(maxAgeMs);
+    console.log(`[API] Cleaned up ${cleaned} old sandbox directories`);
+    return c.json({ success: true, cleaned });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
 });
 
 // --- Variables API ---
@@ -329,8 +356,18 @@ app.use("/*", serveStatic({ root: "./client/dist" }));
 app.get("*", serveStatic({ path: "./client/dist/index.html" }));
 
 if (import.meta.main) {
-  console.log("Starting HomeworkCI server on http://localhost:8000");
-  Deno.serve({ port: 8000 }, app.fetch);
+  // Log configuration
+  logConfig();
+
+  // Cleanup old sandbox directories on startup
+  cleanupOldSandboxes(config.sandboxMaxAgeMs).then((cleaned) => {
+    if (cleaned > 0) {
+      console.log(`[Startup] Cleaned up ${cleaned} old sandbox directories`);
+    }
+  });
+
+  console.log(`Starting HomeworkCI server on http://${config.host}:${config.port}`);
+  Deno.serve({ port: config.port, hostname: config.host }, app.fetch);
 }
 
 export default app;

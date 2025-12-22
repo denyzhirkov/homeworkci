@@ -18,6 +18,9 @@ data/
 *.db-wal
 *.db-shm
 
+# Sandbox temp directories
+tmp/
+
 # Node
 node_modules/
 dist/
@@ -45,3 +48,11 @@ config.local.json
 
 # Cursor
 .cursor/
+
+# Docker
+.docker/
+
+# Environment files (keep env.example)
+.env
+.env.local
+.env.*.local

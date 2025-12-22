@@ -1,0 +1,81 @@
+# HomeworkCI Docker Compose
+# Production deployment configuration
+
+services:
+  # Backend server (Deno)
+  server:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    container_name: homeworkci-server
+    restart: unless-stopped
+    environment:
+      - PORT=${PORT:-8000}
+      - HOST=${HOST:-0.0.0.0}
+      - PIPELINES_DIR=/app/pipelines
+      - MODULES_DIR=/app/modules
+      - DATA_DIR=/app/data
+      - CONFIG_DIR=/app/config
+      - SANDBOX_DIR=/app/tmp
+      - SANDBOX_MAX_AGE_HOURS=${SANDBOX_MAX_AGE_HOURS:-24}
+      - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
+    volumes:
+      # Persistent data
+      - homeworkci-data:/app/data
+      - homeworkci-config:/app/config
+      # Editable content (can be mounted from host for development)
+      - homeworkci-pipelines:/app/pipelines
+      - homeworkci-modules:/app/modules
+      # Temporary sandbox (can use tmpfs for better performance)
+      - homeworkci-tmp:/app/tmp
+    networks:
+      - homeworkci-network
+    # Uncomment for Docker-in-Docker support (future feature)
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "deno", "eval", "const r = await fetch('http://localhost:8000/api/health').catch(() => null); Deno.exit(r?.ok ? 0 : 1);"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Frontend (Nginx + React)
+  client:
+    build:
+      context: .
+      dockerfile: docker/client.Dockerfile
+      args:
+        VITE_API_BASE: /api
+    container_name: homeworkci-client
+    restart: unless-stopped
+    ports:
+      - "${CLIENT_PORT:-80}:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - homeworkci-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+networks:
+  homeworkci-network:
+    driver: bridge
+
+volumes:
+  homeworkci-data:
+    driver: local
+  homeworkci-config:
+    driver: local
+  homeworkci-pipelines:
+    driver: local
+  homeworkci-modules:
+    driver: local
+  homeworkci-tmp:
+    driver: local
+

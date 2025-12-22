@@ -1,7 +1,8 @@
 import { Database } from "@db/sqlite";
 import { ensureDir } from "@std/fs";
+import { config } from "./config.ts";
 
-const DATA_DIR = "./data";
+const DATA_DIR = config.dataDir;
 const DB_PATH = `${DATA_DIR}/homework.db`;
 
 await ensureDir(DATA_DIR);

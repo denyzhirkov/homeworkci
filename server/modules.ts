@@ -1,7 +1,8 @@
 import { ensureDir } from "@std/fs";
 import { join, parse } from "@std/path";
+import { config } from "./config.ts";
 
-const MODULES_DIR = "./modules";
+const MODULES_DIR = config.modulesDir;
 
 // Ensure modules dir exists
 await ensureDir(MODULES_DIR);

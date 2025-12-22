@@ -15,7 +15,7 @@ export async function run(ctx: any, params: { cmd: string }) {
 
   const command = new Deno.Command("sh", {
     args: ["-c", params.cmd],
-    cwd: ctx.cwd,
+    cwd: ctx.workDir, // Use sandboxed working directory for isolation
     env: ctx.env,
     stdout: "piped",
     stderr: "piped",

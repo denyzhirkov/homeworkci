@@ -1,4 +1,6 @@
-const API_BASE = "http://localhost:8000/api";
+// API base URL - defaults to /api for production (nginx proxy)
+// Can be overridden via VITE_API_BASE env var for development
+const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
 export interface Pipeline {
   id: string;

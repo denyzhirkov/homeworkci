@@ -206,7 +206,7 @@ export async function run(ctx: any, params: any) {
             <Typography variant="h6" gutterBottom>Description</Typography>
             <Typography color="text.secondary">{description}</Typography>
             {fullDocs && fullDocs !== description && (
-              <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+              <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
                 <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 13 }}>
                   {fullDocs}
                 </pre>
@@ -309,23 +309,23 @@ const dbHost = ctx.env.DATABASE_HOST;
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               The <code>ctx</code> object passed to the module's <code>run()</code> function:
             </Typography>
-            <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', '& td, & th': { border: '1px solid #ddd', p: 1.5 } }}>
+            <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', '& td, & th': { border: '1px solid', borderColor: 'divider', p: 1.5 } }}>
               <thead>
-                <tr style={{ backgroundColor: '#f5f5f5' }}>
+                <tr style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
                   <th style={{ textAlign: 'left' }}>Property</th>
                   <th style={{ textAlign: 'left' }}>Type</th>
                   <th style={{ textAlign: 'left' }}>Description</th>
                 </tr>
               </thead>
               <tbody>
-                <tr><td><code>ctx.env</code></td><td>Record&lt;string, string&gt;</td><td>Merged environment variables (system + global + selected env)</td></tr>
+                <tr><td><code>ctx.workDir</code></td><td>string</td><td>Isolated sandbox directory for this pipeline run</td></tr>
+                <tr><td><code>ctx.env</code></td><td>Record&lt;string, string&gt;</td><td>Merged environment variables (whitelisted system + global + selected env)</td></tr>
                 <tr><td><code>ctx.prev</code></td><td>any</td><td>Result of the previous step (use via {"${prev}"})</td></tr>
                 <tr><td><code>ctx.results</code></td><td>Record&lt;string, any&gt;</td><td>Results from named steps (keyed by step name)</td></tr>
-                <tr><td><code>ctx.cwd</code></td><td>string</td><td>Current working directory</td></tr>
-                <tr><td><code>ctx.workDir</code></td><td>string</td><td>Working directory for the pipeline</td></tr>
                 <tr><td><code>ctx.pipelineId</code></td><td>string</td><td>Current pipeline ID</td></tr>
                 <tr><td><code>ctx.startTime</code></td><td>number</td><td>Pipeline start timestamp</td></tr>
-                <tr><td><code>ctx.log(msg)</code></td><td>function</td><td>Log a message to the pipeline output</td></tr>
+                <tr><td><code>ctx.log(msg)</code></td><td>function</td><td>Log a message (sensitive data is automatically masked)</td></tr>
+                <tr><td><code>ctx.signal</code></td><td>AbortSignal</td><td>Signal for pipeline cancellation</td></tr>
               </tbody>
             </Box>
           </Paper>

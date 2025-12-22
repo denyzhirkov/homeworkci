@@ -230,14 +230,14 @@ export default function PipelineDetail() {
       {/* Tab Content */}
       {activeTab === 0 ? (
         // Logs View
-        <Box sx={{ display: 'flex', flexGrow: 1, overflow: 'hidden', border: '1px solid #ddd', borderRadius: 1 }}>
+        <Box sx={{ display: 'flex', flexGrow: 1, overflow: 'hidden', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
           {/* History List */}
-          <Box sx={{ width: 220, borderRight: '1px solid #ddd', overflowY: 'auto', bgcolor: '#fafafa' }}>
+          <Box sx={{ width: 220, borderRight: '1px solid', borderColor: 'divider', overflowY: 'auto', bgcolor: 'background.paper' }}>
             <List dense disablePadding>
               <ListItemButton
                 selected={selectedRun === 'live'}
                 onClick={() => setSelectedRun('live')}
-                sx={{ borderBottom: '1px solid #eee' }}
+                sx={{ borderBottom: '1px solid', borderColor: 'divider' }}
               >
                 <ListItemIcon sx={{ minWidth: 32 }}>
                   {isRunning ? <CircularProgress size={18} /> : <PlayArrow color="warning" fontSize="small" />}

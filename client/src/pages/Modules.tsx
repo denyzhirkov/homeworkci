@@ -88,19 +88,19 @@ export default function Modules() {
                 </Box>
 
                 {mod.fullDocs && (
-                  <Accordion disableGutters elevation={0} sx={{ '&:before': { display: 'none' }, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                  <Accordion disableGutters elevation={0} sx={{ '&:before': { display: 'none' }, bgcolor: 'action.hover', borderRadius: 1 }}>
                     <AccordionSummary expandIcon={<ExpandMore />} sx={{ minHeight: 32, '& .MuiAccordionSummary-content': { margin: '8px 0' } }}>
                       <Typography variant="caption" fontWeight="bold">Documentation & Usage</Typography>
                     </AccordionSummary>
                     <AccordionDetails sx={{ p: 1, pt: 0 }}>
-                      <Box sx={{ maxHeight: 150, overflow: 'auto', p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #e0e0e0' }}>
+                      <Box sx={{ maxHeight: 150, overflow: 'auto', p: 1, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
                         <pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{mod.fullDocs}</pre>
                       </Box>
                     </AccordionDetails>
                   </Accordion>
                 )}
               </CardContent>
-              <CardActions disableSpacing sx={{ justifyContent: 'flex-end', borderTop: '1px solid #eee', px: 2, py: 1 }}>
+              <CardActions disableSpacing sx={{ justifyContent: 'flex-end', borderTop: '1px solid', borderColor: 'divider', px: 2, py: 1 }}>
                 {!mod.isBuiltIn && (
                   <Button
                     size="small"

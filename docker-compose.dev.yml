@@ -1,0 +1,24 @@
+# HomeworkCI Docker Compose - Development Override
+# Use with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    volumes:
+      # Mount local directories for development
+      - ./pipelines:/app/pipelines
+      - ./modules:/app/modules
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./tmp:/app/tmp
+      # Mount server code for hot-reload (requires restart)
+      - ./server:/app/server:ro
+    environment:
+      - SANDBOX_MAX_AGE_HOURS=1
+
+  client:
+    ports:
+      - "3000:80"  # Different port for dev
+
