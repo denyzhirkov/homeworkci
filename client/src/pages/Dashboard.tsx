@@ -22,6 +22,10 @@ export default function Dashboard() {
   const [pipelines, setPipelines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<Record<string, ProgressInfo>>({});
+  const [systemMetrics, setSystemMetrics] = useState<{ memoryPercent: string; cpuLoad: string }>({
+    memoryPercent: "—",
+    cpuLoad: "—",
+  });
 
   // Initial load
   useEffect(() => {
@@ -36,7 +40,13 @@ export default function Dashboard() {
 
   // Handle WebSocket events for real-time updates
   const handleEvent = useCallback((event: WSEvent) => {
-    if (event.type === "init") {
+    if (event.type === "system") {
+      // Update system metrics in real-time
+      setSystemMetrics({
+        memoryPercent: event.payload.memoryPercent,
+        cpuLoad: event.payload.cpuLoad,
+      });
+    } else if (event.type === "init") {
       // Update running status from WebSocket
       setPipelines(prev => {
         return prev.map(p => {
@@ -83,42 +93,67 @@ export default function Dashboard() {
 
   if (loading) return <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>;
 
-  const StatCard = ({ icon, title, value, color = "primary.main" }: any) => (
-    <Card sx={{ height: '100%', display: 'flex', alignItems: 'center', p: 2 }}>
-      <Avatar sx={{ bgcolor: color, width: 56, height: 56, mr: 2 }}>
-        {icon}
-      </Avatar>
-      <Box>
-        <Typography variant="h4" fontWeight="bold">{value}</Typography>
-        <Typography variant="body2" color="text.secondary">{title}</Typography>
-      </Box>
-    </Card>
-  );
+  const StatCard = ({ icon, title, value, color = "primary.main", to }: any) => {
+    const cardContent = (
+      <>
+        <Avatar sx={{ bgcolor: color, width: 48, height: 48, mr: 2 }}>
+          {icon}
+        </Avatar>
+        <Box>
+          <Typography variant="h5" fontWeight="bold">{value}</Typography>
+          <Typography variant="body2" color="text.secondary">{title}</Typography>
+        </Box>
+      </>
+    );
+
+    return to ? (
+      <Card
+        component={Link}
+        to={to}
+        sx={{
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          p: 2,
+          textDecoration: 'none',
+          cursor: 'pointer',
+          transition: '0.2s',
+          '&:hover': { transform: 'translateY(-2px)', boxShadow: 3 }
+        }}
+      >
+        {cardContent}
+      </Card>
+    ) : (
+      <Card sx={{ height: '100%', display: 'flex', alignItems: 'center', p: 2 }}>
+        {cardContent}
+      </Card>
+    );
+  };
 
   return (
     <Container maxWidth="lg">
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
-          Welcome back
-        </Typography>
-        <Typography variant="subtitle1" color="text.secondary">
-          System operational on <strong>{stats?.platform}</strong> (Deno {stats?.denoVersion}).
+      <Box sx={{ mt: 1, mb: 1 }}>
+        <Typography variant="h5" component="h1">
+          Dashboard
+          <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1.5 }}>
+            — {stats?.platform}, Deno {stats?.denoVersion}
+          </Typography>
         </Typography>
       </Box>
 
       {/* Stats Grid */}
-      <Grid container spacing={3} sx={{ mb: 6 }}>
+      <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }} key="pipelines">
-          <StatCard icon={<AccountTree />} title="Pipelines" value={stats?.pipelinesCount} color="#1976d2" />
+          <StatCard icon={<AccountTree />} title="Pipelines" value={stats?.pipelinesCount} color="#1976d2" to="/pipelines" />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }} key="modules">
-          <StatCard icon={<Extension />} title="Modules" value={stats?.modulesCount} color="#9c27b0" />
+          <StatCard icon={<Extension />} title="Modules" value={stats?.modulesCount} color="#9c27b0" to="/modules" />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }} key="uptime">
-          <StatCard icon={<Timer />} title="Uptime (s)" value={Math.floor(stats?.uptime || 0)} color="#2e7d32" />
+        <Grid size={{ xs: 12, sm: 6, md: 3 }} key="memory">
+          <StatCard icon={<Storage />} title="Memory" value={systemMetrics.memoryPercent} color="#2e7d32" />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }} key="vars">
-          <StatCard icon={<Storage />} title="Environment" value="Active" color="#ed6c02" />
+        <Grid size={{ xs: 12, sm: 6, md: 3 }} key="cpu">
+          <StatCard icon={<Timer />} title="CPU Load" value={systemMetrics.cpuLoad} color="#ed6c02" />
         </Grid>
       </Grid>
 

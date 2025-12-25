@@ -10,6 +10,14 @@ export interface PipelineStatus {
   stepsCount: number;
 }
 
+// System metrics payload
+export interface SystemMetrics {
+  memoryPercent: string;
+  memoryUsed: string;
+  memoryTotal: string;
+  cpuLoad: string;
+}
+
 // Event types matching server pubsub.ts
 export type WSEvent =
   | { type: "init"; pipelines: PipelineStatus[] }
@@ -18,6 +26,7 @@ export type WSEvent =
   | { type: "end"; pipelineId: string; payload: { runId: string; success: boolean } }
   | { type: "step-start"; pipelineId: string; payload: { runId: string; step: string; stepIndex: number; totalSteps: number } }
   | { type: "step-end"; pipelineId: string; payload: { runId: string; step: string; stepIndex: number; totalSteps: number; success: boolean; error?: string } }
+  | { type: "system"; payload: SystemMetrics }
   | { type: "pipelines:changed" }
   | { type: "modules:changed" }
   | { type: "variables:changed" };

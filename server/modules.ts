@@ -11,7 +11,7 @@ const MODULES_DIR = config.modulesDir;
 // Ensure modules dir exists
 await ensureDir(MODULES_DIR);
 
-const DEFAULT_MODULES = ["shell", "http", "git", "fs", "delay", "docker"];
+const DEFAULT_MODULES = ["shell", "http", "git", "fs", "delay", "docker", "notify", "archive"];
 
 // Module cache with TTL to prevent memory leaks from cache busting
 interface CachedModule {
@@ -68,7 +68,7 @@ export async function listModules(): Promise<ModuleInfo[]> {
 
         // Parse tags from "// Tags: tag1, tag2" in comments
         const tagsMatch = fullDocs.match(/^Tags?:\s*(.+)$/mi);
-        const tags = tagsMatch 
+        const tags = tagsMatch
           ? tagsMatch[1].split(',').map(t => t.trim().toLowerCase()).filter(t => t)
           : [];
 
@@ -83,19 +83,19 @@ export async function listModules(): Promise<ModuleInfo[]> {
 
 export async function loadModule(name: string): Promise<StepModule | null> {
   const now = Date.now();
-  
+
   // Check cache first
   const cached = moduleCache.get(name);
   if (cached && (now - cached.loadedAt) < MODULE_CACHE_TTL) {
     return cached.module;
   }
-  
+
   try {
     // Determine absolute path (handle both relative and absolute MODULES_DIR)
-    const fullPath = MODULES_DIR.startsWith("/") 
+    const fullPath = MODULES_DIR.startsWith("/")
       ? join(MODULES_DIR, `${name}.ts`)
       : join(Deno.cwd(), MODULES_DIR, `${name}.ts`);
-    
+
     // Use timestamp for cache busting only when reloading (not on every call)
     const cacheVersion = cached ? now : 0;
     const importUrl = `file://${fullPath}?v=${cacheVersion}`;
@@ -106,7 +106,7 @@ export async function loadModule(name: string): Promise<StepModule | null> {
     }
 
     const stepModule = mod as StepModule;
-    
+
     // Cleanup old cache entries if at limit
     if (moduleCache.size >= MAX_CACHE_SIZE) {
       // Remove oldest entry
@@ -122,7 +122,7 @@ export async function loadModule(name: string): Promise<StepModule | null> {
         moduleCache.delete(oldestKey);
       }
     }
-    
+
     // Cache the module
     moduleCache.set(name, {
       module: stepModule,

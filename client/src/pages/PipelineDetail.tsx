@@ -229,22 +229,18 @@ export default function PipelineDetail() {
   if (!pipeline) return <Typography>Not found</Typography>;
 
   return (
-    <Box sx={{ height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', p: 3 }}>
+    <Box sx={{ height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <IconButton component={Link} to="/pipelines" color="inherit"><ArrowBack /></IconButton>
-          <Box>
-            <Typography variant="h5" component="h1">
-              {pipeline?.name || (isNew ? "New Pipeline" : id)}
-              {isRunning && <Chip size="small" label="Running" color="success" sx={{ ml: 1 }} />}
-              {pipeline?.isDemo && <Chip size="small" label="Demo" color="info" sx={{ ml: 1 }} />}
-            </Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-              {!isNew && <Chip label={id} size="small" variant="outlined" sx={{ fontFamily: 'monospace', fontSize: 10 }} />}
-              {pipeline?.env && <Chip label={`Env: ${pipeline.env}`} size="small" color="secondary" variant="outlined" />}
-            </Stack>
-          </Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <IconButton component={Link} to="/pipelines" color="inherit" size="small"><ArrowBack /></IconButton>
+          <Typography variant="h6" component="h1">
+            {pipeline?.name || (isNew ? "New Pipeline" : id)}
+          </Typography>
+          {!isNew && <Chip label={id} size="small" variant="outlined" sx={{ fontFamily: 'monospace', fontSize: 10 }} />}
+          {pipeline?.env && <Chip label={`Env: ${pipeline.env}`} size="small" color="secondary" variant="outlined" />}
+          {isRunning && <Chip size="small" label="Running" color="success" />}
+          {pipeline?.isDemo && <Chip size="small" label="Demo" color="info" />}
         </Box>
         <Stack direction="row" spacing={1}>
           {isRunning ? (

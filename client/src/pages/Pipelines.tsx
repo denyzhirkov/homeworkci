@@ -115,7 +115,7 @@ export default function Pipelines() {
 
   return (
     <Container maxWidth="lg">
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1, mb: 1 }}>
         <Typography variant="h5" component="h1">
           Pipelines
           <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1.5 }}>

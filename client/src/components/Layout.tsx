@@ -88,8 +88,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </List>
         </Box>
       </Drawer>
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
-        <Toolbar />
+      <Box component="main" sx={{ flexGrow: 1, p: 2 }}>
+        <Toolbar variant="dense" />
         {children}
       </Box>
     </Box>

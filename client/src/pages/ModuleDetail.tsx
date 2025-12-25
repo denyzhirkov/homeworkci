@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { ArrowBack, Save, Delete, Code, MenuBook, Add, LocalOffer } from "@mui/icons-material";
 import {
-  Box, Typography, Button, Paper, IconButton,
-  CircularProgress, Stack, Tabs, Tab, Alert, Chip, TextField
+  Box, Typography, Button, Paper, IconButton, Chip,
+  CircularProgress, Stack, Tabs, Tab, Alert, TextField
 } from "@mui/material";
 import Editor from "@monaco-editor/react";
 import { getModuleDetails, saveModule, deleteModule } from "../lib/api";
@@ -222,28 +222,26 @@ export async function run(ctx: PipelineContext, params: { foo: string }): Promis
   const { description, usageExample, fullDocs } = parseModuleComments(code);
 
   return (
-    <Box sx={{ height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', p: 3 }}>
+    <Box sx={{ height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <IconButton component={Link} to="/modules" color="inherit"><ArrowBack /></IconButton>
-          <Typography variant="h5" component="h1">
-            {isNew ? "New Module" : `Module: ${id}`}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <IconButton component={Link} to="/modules" color="inherit" size="small"><ArrowBack /></IconButton>
+          <Typography variant="h6" component="h1">
+            {isNew ? "New Module" : id}
           </Typography>
           {isBuiltIn && (
-            <Typography variant="caption" sx={{ bgcolor: 'info.main', color: 'white', px: 1, py: 0.5, borderRadius: 1 }}>
-              Built-in
-            </Typography>
+            <Chip label="Built-in" size="small" color="info" />
           )}
         </Box>
-        <Stack direction="row" spacing={2}>
+        <Stack direction="row" spacing={1}>
           {!isBuiltIn && (
-            <Button variant="outlined" color="inherit" startIcon={<Save />} onClick={handleSave}>
+            <Button variant="outlined" color="inherit" size="small" startIcon={<Save />} onClick={handleSave}>
               Save
             </Button>
           )}
           {!isNew && !isBuiltIn && (
-            <Button variant="contained" color="error" startIcon={<Delete />} onClick={handleDelete}>
+            <Button variant="contained" color="error" size="small" startIcon={<Delete />} onClick={handleDelete}>
               Delete
             </Button>
           )}
