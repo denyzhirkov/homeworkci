@@ -55,6 +55,9 @@ function validatePipelineId(id: string): void {
 
 const runningPipelines = new Map<string, RunningPipeline>();
 
+// Maximum log buffer size to prevent memory exhaustion on long-running pipelines
+const MAX_LOG_BUFFER_SIZE = 10 * 1024 * 1024; // 10MB
+
 export function getActivePipelines(): string[] {
   return Array.from(runningPipelines.keys());
 }
@@ -206,7 +209,15 @@ export async function runPipeline(id: string) {
   const log = (msg: string) => {
     console.log(msg);
     const ts = new Date().toISOString();
-    logBuffer += `[${ts}] ${msg}\n`;
+    const line = `[${ts}] ${msg}\n`;
+
+    // Prevent memory exhaustion by truncating old logs when buffer is too large
+    if (logBuffer.length + line.length > MAX_LOG_BUFFER_SIZE) {
+      const halfSize = Math.floor(MAX_LOG_BUFFER_SIZE / 2);
+      logBuffer = logBuffer.slice(-halfSize) + "\n[...earlier logs truncated...]\n";
+    }
+
+    logBuffer += line;
     runningInfo.logBuffer = logBuffer;
     pubsub.publish({ type: "log", pipelineId: id, payload: { runId, msg, ts } });
   };
@@ -259,52 +270,56 @@ export async function runPipeline(id: string) {
   let currentStepIndex = 0;
 
   try {
-    for (const group of stepGroups) {
-      if (group.length === 1) {
-        const { step, result } = await executeStep(group[0], currentStepIndex);
-        ctx.prev = result;
-        if (step.name) ctx.results[step.name] = result;
-        currentStepIndex++;
-      } else {
-        log(`Running ${group.length} steps in parallel (group: ${group[0].parallel})`);
-        const startIndex = currentStepIndex;
-        const results = await Promise.all(
-          group.map((step, i) => executeStep(step, startIndex + i))
-        );
-
-        for (const { step, result } of results) {
+    try {
+      for (const group of stepGroups) {
+        if (group.length === 1) {
+          const { step, result } = await executeStep(group[0], currentStepIndex);
+          ctx.prev = result;
           if (step.name) ctx.results[step.name] = result;
+          currentStepIndex++;
+        } else {
+          log(`Running ${group.length} steps in parallel (group: ${group[0].parallel})`);
+          const startIndex = currentStepIndex;
+          const results = await Promise.all(
+            group.map((step, i) => executeStep(step, startIndex + i))
+          );
+
+          for (const { step, result } of results) {
+            if (step.name) ctx.results[step.name] = result;
+          }
+          ctx.prev = results[results.length - 1].result;
+          currentStepIndex += group.length;
         }
-        ctx.prev = results[results.length - 1].result;
-        currentStepIndex += group.length;
+      }
+    } catch (e: unknown) {
+      success = false;
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      log(`Pipeline failed: ${errorMsg}`);
+    } finally {
+      // Stop persistent Docker container if used
+      if (config.dockerEnabled) {
+        await stopPersistentContainer(id, runId);
+      }
+
+      // Cleanup sandbox
+      if (!pipeline.keepWorkDir) {
+        await cleanupSandbox(sandboxPath, log);
+      } else {
+        log(`[Sandbox] Keeping working directory for debugging: ${sandboxPath}`);
       }
     }
-  } catch (e: unknown) {
-    success = false;
-    const errorMsg = e instanceof Error ? e.message : String(e);
-    log(`Pipeline failed: ${errorMsg}`);
+
+    const duration = Date.now() - ctx.startTime;
+    log(`\nPipeline finished. Duration: ${duration}ms`);
+
+    saveLog(dbRunId, success ? "success" : "fail", logBuffer, duration);
+    pubsub.publish({ type: "end", pipelineId: id, payload: { runId, success } });
+
+    return { success, duration, runId, workDir: pipeline.keepWorkDir ? sandboxPath : null };
   } finally {
-    // Stop persistent Docker container if used
-    if (config.dockerEnabled) {
-      await stopPersistentContainer(id, runId);
-    }
-
-    // Cleanup sandbox
-    if (!pipeline.keepWorkDir) {
-      await cleanupSandbox(sandboxPath, log);
-    } else {
-      log(`[Sandbox] Keeping working directory for debugging: ${sandboxPath}`);
-    }
+    // Guarantee cleanup of runningPipelines Map to prevent memory leaks
+    runningPipelines.delete(id);
   }
-
-  const duration = Date.now() - ctx.startTime;
-  log(`\nPipeline finished. Duration: ${duration}ms`);
-
-  saveLog(dbRunId, success ? "success" : "fail", logBuffer, duration);
-  pubsub.publish({ type: "end", pipelineId: id, payload: { runId, success } });
-  runningPipelines.delete(id);
-
-  return { success, duration, runId, workDir: pipeline.keepWorkDir ? sandboxPath : null };
 }
 
 // --- Helper functions ---

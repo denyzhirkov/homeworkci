@@ -7,6 +7,9 @@ export class Scheduler {
   // Track execution to prevent double runs within the same minute logic
   // In a real app we'd persist this or use a DB.
   private lastChecks: Map<string, number> = new Map();
+  
+  // Maximum age for lastChecks entries (5 minutes)
+  private readonly MAX_CHECK_AGE_MS = 5 * 60 * 1000;
 
   start() {
     console.log("[Scheduler] Started");
@@ -18,9 +21,23 @@ export class Scheduler {
   stop() {
     if (this.intervalId) clearInterval(this.intervalId);
   }
+  
+  // Cleanup old entries from lastChecks to prevent memory leaks
+  private cleanupOldChecks(): void {
+    const now = Date.now();
+    for (const [key, timestamp] of this.lastChecks) {
+      if (now - timestamp > this.MAX_CHECK_AGE_MS) {
+        this.lastChecks.delete(key);
+      }
+    }
+  }
 
   async tick() {
     const now = new Date();
+    
+    // Periodically cleanup old entries
+    this.cleanupOldChecks();
+    
     const pipelines = await listPipelines();
 
     for (const p of pipelines) {
@@ -44,12 +61,6 @@ export class Scheduler {
             console.log(`[Scheduler] Triggering scheduled pipeline: ${p.name} (${p.id})`);
             this.lastChecks.set(key, Date.now());
 
-            // Clear old keys to prevent memory leak
-            if (this.lastChecks.size > 100) {
-              const keys = Array.from(this.lastChecks.keys());
-              this.lastChecks.delete(keys[0]);
-            }
-
             runPipeline(p.id).catch(err => {
               console.error(`[Scheduler] Pipeline ${p.name} failed:`, err);
             });
@@ -59,5 +70,12 @@ export class Scheduler {
         console.error(`[Scheduler] Error evaluating schedule for ${p.name}:`, e);
       }
     }
+  }
+  
+  // Get scheduler stats (for monitoring)
+  getStats(): { pendingChecks: number } {
+    return {
+      pendingChecks: this.lastChecks.size,
+    };
   }
 }

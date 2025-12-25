@@ -13,6 +13,20 @@ await ensureDir(MODULES_DIR);
 
 const DEFAULT_MODULES = ["shell", "http", "git", "fs", "delay", "docker"];
 
+// Module cache with TTL to prevent memory leaks from cache busting
+interface CachedModule {
+  module: StepModule;
+  loadedAt: number;
+  importUrl: string;
+}
+const moduleCache = new Map<string, CachedModule>();
+
+// Cache TTL in milliseconds (1 minute - allows hot reload during development)
+const MODULE_CACHE_TTL = 60 * 1000;
+
+// Maximum cache size to prevent unbounded growth
+const MAX_CACHE_SIZE = 50;
+
 export function isBuiltInModule(name: string): boolean {
   return DEFAULT_MODULES.includes(name);
 }
@@ -68,23 +82,77 @@ export async function listModules(): Promise<ModuleInfo[]> {
 }
 
 export async function loadModule(name: string): Promise<StepModule | null> {
+  const now = Date.now();
+  
+  // Check cache first
+  const cached = moduleCache.get(name);
+  if (cached && (now - cached.loadedAt) < MODULE_CACHE_TTL) {
+    return cached.module;
+  }
+  
   try {
     // Determine absolute path (handle both relative and absolute MODULES_DIR)
     const fullPath = MODULES_DIR.startsWith("/") 
       ? join(MODULES_DIR, `${name}.ts`)
       : join(Deno.cwd(), MODULES_DIR, `${name}.ts`);
-    const importUrl = `file://${fullPath}?v=${Date.now()}`; // Cache busting
+    
+    // Use timestamp for cache busting only when reloading (not on every call)
+    const cacheVersion = cached ? now : 0;
+    const importUrl = `file://${fullPath}?v=${cacheVersion}`;
     const mod = await import(importUrl);
 
     if (typeof mod.run !== "function") {
       throw new Error(`Module ${name} does not export a 'run' function.`);
     }
 
-    return mod as StepModule;
+    const stepModule = mod as StepModule;
+    
+    // Cleanup old cache entries if at limit
+    if (moduleCache.size >= MAX_CACHE_SIZE) {
+      // Remove oldest entry
+      let oldestKey: string | null = null;
+      let oldestTime = Infinity;
+      for (const [key, value] of moduleCache) {
+        if (value.loadedAt < oldestTime) {
+          oldestTime = value.loadedAt;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey) {
+        moduleCache.delete(oldestKey);
+      }
+    }
+    
+    // Cache the module
+    moduleCache.set(name, {
+      module: stepModule,
+      loadedAt: now,
+      importUrl,
+    });
+
+    return stepModule;
   } catch (e) {
     console.error(`Failed to load module ${name}:`, e);
     return null;
   }
+}
+
+// Invalidate cache for a specific module (call after save/delete)
+export function invalidateModuleCache(name: string): void {
+  moduleCache.delete(name);
+}
+
+// Clear entire module cache
+export function clearModuleCache(): void {
+  moduleCache.clear();
+}
+
+// Get cache stats (for monitoring)
+export function getModuleCacheStats(): { size: number; modules: string[] } {
+  return {
+    size: moduleCache.size,
+    modules: Array.from(moduleCache.keys()),
+  };
 }
 
 export async function getModuleSource(name: string): Promise<string> {
@@ -94,6 +162,8 @@ export async function getModuleSource(name: string): Promise<string> {
 export async function saveModule(name: string, content: string): Promise<void> {
   const safeName = parse(name).name; // Prevent directory traversal
   await Deno.writeTextFile(join(MODULES_DIR, `${safeName}.ts`), content);
+  // Invalidate cache so next load gets updated module
+  invalidateModuleCache(safeName);
 }
 
 export async function deleteModule(name: string): Promise<void> {
@@ -102,4 +172,6 @@ export async function deleteModule(name: string): Promise<void> {
     throw new Error("Cannot delete default module.");
   }
   await Deno.remove(join(MODULES_DIR, `${safeName}.ts`));
+  // Remove from cache
+  invalidateModuleCache(safeName);
 }

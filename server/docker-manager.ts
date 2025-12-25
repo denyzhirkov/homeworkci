@@ -293,11 +293,27 @@ export async function runContainer(
 
     // Start persistent container if not exists
     if (!persistentContainers.has(runKey)) {
-      await startPersistentContainer(
-        persistentName, image, hostWorkDir, workdir, network, memory, cpus, options.env, log
-      );
-      persistentContainers.set(runKey, persistentName);
-      trackContainer(runKey, persistentName);
+      try {
+        await startPersistentContainer(
+          persistentName, image, hostWorkDir, workdir, network, memory, cpus, options.env, log
+        );
+        persistentContainers.set(runKey, persistentName);
+        trackContainer(runKey, persistentName);
+      } catch (e) {
+        // Ensure container is killed on startup failure
+        log(`[Docker] Failed to start persistent container, cleaning up...`);
+        await killContainer(persistentName);
+        // Also try to remove in case it was partially created
+        try {
+          const rmCmd = new Deno.Command("docker", {
+            args: ["rm", "-f", persistentName],
+            stdout: "null",
+            stderr: "null",
+          });
+          await rmCmd.output();
+        } catch { /* ignore */ }
+        throw e;
+      }
     }
 
     // Execute command in persistent container
@@ -495,4 +511,39 @@ export async function isDockerAvailable(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// Check if a container exists
+export async function containerExists(name: string): Promise<boolean> {
+  try {
+    const cmd = new Deno.Command("docker", {
+      args: ["inspect", name],
+      stdout: "null",
+      stderr: "null",
+    });
+    return (await cmd.output()).success;
+  } catch {
+    return false;
+  }
+}
+
+// Cleanup orphan entries in tracking Maps (empty Sets)
+export function cleanupOrphanTracking(): void {
+  for (const [runKey, containers] of runningContainers) {
+    if (containers.size === 0) {
+      runningContainers.delete(runKey);
+    }
+  }
+}
+
+// Get tracking stats for monitoring
+export function getTrackingStats(): { runningContainers: number; persistentContainers: number } {
+  let totalContainers = 0;
+  for (const containers of runningContainers.values()) {
+    totalContainers += containers.size;
+  }
+  return {
+    runningContainers: totalContainers,
+    persistentContainers: persistentContainers.size,
+  };
 }
