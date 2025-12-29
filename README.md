@@ -160,6 +160,86 @@ Access data from previous steps and inputs in parameters:
 - `${inputs.inputName}` — Runtime input value
 - `${pipelineId}` — Current pipeline ID
 
+## Variables
+
+Store configuration values in `config/variables.json` for use across pipelines.
+
+### Configuration Structure
+
+```json
+{
+  "global": {
+    "NOTIFY_CHAT_ID": "-1001234567890",
+    "API_BASE_URL": "https://api.example.com"
+  },
+  "environments": {
+    "dev": {
+      "DEPLOY_HOST": "dev.example.com",
+      "DEPLOY_TOKEN": "dev-token-xxx"
+    },
+    "prod": {
+      "DEPLOY_HOST": "example.com",
+      "DEPLOY_TOKEN": "prod-token-yyy"
+    }
+  }
+}
+```
+
+### Global Variables
+
+Available in **all pipelines** regardless of environment setting:
+
+```json
+{
+  "name": "Notify Pipeline",
+  "steps": [
+    {
+      "module": "http",
+      "params": {
+        "url": "${env.API_BASE_URL}/webhook"
+      }
+    },
+    {
+      "module": "notify",
+      "params": {
+        "type": "telegram",
+        "chatId": "${env.NOTIFY_CHAT_ID}",
+        "message": "Done!"
+      }
+    }
+  ]
+}
+```
+
+### Environment Variables
+
+Available when pipeline specifies `env` field. Merged with global variables (environment values override global):
+
+```json
+{
+  "name": "Deploy",
+  "env": "prod",
+  "steps": [
+    {
+      "module": "shell",
+      "params": {
+        "cmd": "deploy --host ${env.DEPLOY_HOST} --token ${env.DEPLOY_TOKEN}"
+      }
+    }
+  ]
+}
+```
+
+### Variable Priority
+
+Variables are merged in order (later values override earlier):
+
+1. **System environment** — Filtered safe variables (PATH, HOME, USER, etc.)
+2. **Global variables** — From `config/variables.json`
+3. **Environment variables** — From selected environment
+
+Manage variables via the **Variables** page in the web UI.
+
 ## Modules
 
 ### shell
