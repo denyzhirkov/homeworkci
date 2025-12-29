@@ -232,3 +232,4 @@ export function parseLogBlocks(content: string): LogBlock[] {
 // Re-export formatDuration for convenience
 export { formatDuration };
 
+
