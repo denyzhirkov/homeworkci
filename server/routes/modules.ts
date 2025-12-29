@@ -1,7 +1,7 @@
 // Module routes - CRUD for pipeline step modules
 
 import { Hono } from "hono";
-import { listModules, getModuleSource, saveModule, deleteModule, isBuiltInModule } from "../modules.ts";
+import { listModules, getModuleSource, saveModule, deleteModule, isBuiltInModule, loadModule } from "../modules.ts";
 import { pubsub } from "../pubsub.ts";
 
 const app = new Hono();
@@ -10,6 +10,25 @@ const app = new Hono();
 app.get("/", async (c) => {
   const modules = await listModules();
   return c.json(modules);
+});
+
+// Get all module schemas for editor hints
+app.get("/schemas", async (c) => {
+  const modules = await listModules();
+  const schemas: Record<string, unknown> = {};
+  
+  for (const mod of modules) {
+    try {
+      const loaded = await loadModule(mod.id);
+      if (loaded && "schema" in loaded && loaded.schema) {
+        schemas[mod.id] = loaded.schema;
+      }
+    } catch {
+      // Skip modules without schema or with load errors
+    }
+  }
+  
+  return c.json(schemas);
 });
 
 // Get module details

@@ -11,12 +11,13 @@ import {
   FormControlLabel, Checkbox, Select, MenuItem, FormControl, InputLabel, Tooltip
 } from "@mui/material";
 import { Add, LocalOffer } from "@mui/icons-material";
-import Editor from "@monaco-editor/react";
-import { getPipeline, savePipeline, runPipeline, stopPipeline, type Pipeline, type PipelineInput, getRunHistory, getRunLog, deletePipeline, createPipeline, getVariables, type VariablesConfig } from "../lib/api";
+import Editor, { type Monaco } from "@monaco-editor/react";
+import { getPipeline, savePipeline, runPipeline, stopPipeline, type Pipeline, type PipelineInput, getRunHistory, getRunLog, deletePipeline, createPipeline, getVariables, type VariablesConfig, getModules, getModuleSchemas, type ModuleInfo, type ModuleSchemasMap } from "../lib/api";
 import type { editor } from "monaco-editor";
 import { useWebSocket, type WSEvent } from "../lib/useWebSocket";
 import LogViewer from "../components/LogViewer";
 import { initializeInputValues } from "../lib/pipeline-inputs";
+import { registerPipelineHints, disposePipelineHints } from "../lib/monaco-pipeline-hints";
 
 type RunEntry = {
   pipelineId: string;
@@ -30,8 +31,16 @@ export default function PipelineDetail() {
 
   const isNew = !id || id === "new";
 
-  const [pipeline, setPipeline] = useState<Pipeline | null>(isNew ? { id: "", name: "New Pipeline", steps: [] } : null);
-  const [json, setJson] = useState(isNew ? JSON.stringify({ name: "New Pipeline", steps: [] }, null, 2) : "");
+  const newPipelineTemplate = {
+    name: "New Pipeline",
+    description: "",
+    env: "",
+    keepWorkDir: false,
+    inputs: [],
+    steps: []
+  };
+  const [pipeline, setPipeline] = useState<Pipeline | null>(isNew ? { id: "", ...newPipelineTemplate } : null);
+  const [json, setJson] = useState(isNew ? JSON.stringify(newPipelineTemplate, null, 2) : "");
   const [loading, setLoading] = useState(!isNew);
   const [history, setHistory] = useState<RunEntry[]>([]);
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
@@ -49,6 +58,11 @@ export default function PipelineDetail() {
   // Variables for quick insert
   const [variables, setVariables] = useState<VariablesConfig>({ global: {}, environments: {} });
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const monacoRef = useRef<Monaco | null>(null);
+
+  // Module schemas for editor hints
+  const [modules, setModules] = useState<ModuleInfo[]>([]);
+  const [moduleSchemas, setModuleSchemas] = useState<ModuleSchemasMap>({});
 
   // Tags editing
   const [tags, setTags] = useState<string[]>([]);
@@ -69,6 +83,21 @@ export default function PipelineDetail() {
     getVariables().then(setVariables).catch(() => {});
   }, []);
 
+  // Load modules and schemas for editor hints
+  useEffect(() => {
+    Promise.all([getModules(), getModuleSchemas()])
+      .then(([mods, schemas]) => {
+        setModules(mods);
+        setModuleSchemas(schemas);
+      })
+      .catch(() => {});
+    
+    // Cleanup on unmount
+    return () => {
+      disposePipelineHints();
+    };
+  }, []);
+
   // Insert text at cursor position in editor
   const insertAtCursor = (text: string) => {
     const editor = editorRef.current;
@@ -85,9 +114,32 @@ export default function PipelineDetail() {
     }
   };
 
-  const handleEditorMount = (editor: editor.IStandaloneCodeEditor) => {
+  const handleEditorMount = (editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     editorRef.current = editor;
+    monacoRef.current = monaco;
+    
+    // Register hints if data is already loaded
+    if (modules.length > 0 && Object.keys(moduleSchemas).length > 0) {
+      registerPipelineHints(monaco, {
+        modules,
+        moduleSchemas,
+        variables,
+        pipelineEnv: pipeline?.env,
+      });
+    }
   };
+
+  // Re-register hints when modules/schemas/variables change
+  useEffect(() => {
+    if (monacoRef.current && modules.length > 0 && Object.keys(moduleSchemas).length > 0) {
+      registerPipelineHints(monacoRef.current, {
+        modules,
+        moduleSchemas,
+        variables,
+        pipelineEnv: pipeline?.env,
+      });
+    }
+  }, [modules, moduleSchemas, variables, pipeline?.env]);
 
   // WebSocket subscription for live updates
   const handleWSEvent = useCallback((event: WSEvent) => {
@@ -258,7 +310,23 @@ export default function PipelineDetail() {
             {pipeline?.name || (isNew ? "New Pipeline" : id)}
           </Typography>
           {!isNew && <Chip label={id} size="small" variant="outlined" sx={{ fontFamily: 'monospace', fontSize: 10 }} />}
-          {pipeline?.env && <Chip label={`Env: ${pipeline.env}`} size="small" color="secondary" variant="outlined" />}
+          {pipeline?.env && (
+            <Chip 
+              label={`Env: ${pipeline.env}`} 
+              size="small" 
+              color="secondary" 
+              variant="outlined"
+              sx={pipeline.env.includes('${') ? {
+                background: 'linear-gradient(90deg, rgba(156,39,176,0.1) 0%, rgba(103,58,183,0.2) 50%, rgba(156,39,176,0.1) 100%)',
+                backgroundSize: '200% 100%',
+                animation: 'shimmer 2s ease-in-out infinite',
+                '@keyframes shimmer': {
+                  '0%': { backgroundPosition: '200% 0' },
+                  '100%': { backgroundPosition: '-200% 0' },
+                },
+              } : undefined}
+            />
+          )}
           {isRunning && <Chip size="small" label="Running" color="success" />}
           {pipeline?.isDemo && <Chip size="small" label="Demo" color="info" />}
         </Box>

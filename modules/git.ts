@@ -15,6 +15,28 @@
 
 import type { PipelineContext } from "../server/types/index.ts";
 
+/** Schema for editor hints */
+export const schema = {
+  params: {
+    op: {
+      type: "string",
+      required: true,
+      enum: ["clone", "pull"],
+      description: "Git operation to perform"
+    },
+    repo: {
+      type: "string",
+      required: false,
+      description: "Repository URL (required for clone)"
+    },
+    dir: {
+      type: "string",
+      required: false,
+      description: "Target directory for clone, defaults to repo name"
+    }
+  }
+};
+
 export async function run(ctx: PipelineContext, params: { op: "clone" | "pull"; repo?: string; dir?: string }): Promise<{ success: true } | { skipped: true }> {
   if (params.op === "clone") {
     if (!params.repo) throw new Error("Repo URL required");

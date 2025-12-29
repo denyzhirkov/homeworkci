@@ -5,10 +5,13 @@ Minimalist self-hosted CI/CD server built with Deno and React. Define pipelines 
 ## Features
 
 - **JSON Pipelines** — Define automation workflows in simple JSON format
-- **Modular Steps** — Built-in modules: shell, docker, http, git, fs, delay
+- **Modular Steps** — Built-in modules: shell, docker, http, git, fs, delay, notify, archive
 - **Docker Runner** — Execute steps in isolated Docker containers with resource limits
 - **Parallel Execution** — Run multiple steps simultaneously
 - **Variable Interpolation** — Access step results via `${results.stepName}` and `${prev}`
+- **Pipeline Inputs** — Parameterize pipelines with runtime inputs (string, boolean, select)
+- **Dynamic Environment** — Select environment at runtime via `${inputs.ENV}`
+- **Smart Editor** — Monaco editor with autocomplete for modules, parameters, and variables
 - **Sandboxed Execution** — Each pipeline run gets an isolated working directory
 - **Cron Scheduling** — Schedule pipelines with cron expressions
 - **Real-time Logs** — WebSocket-based live log streaming
@@ -100,14 +103,62 @@ Pipelines are JSON files in the `pipelines/` directory:
 | `params` | object | Module-specific parameters |
 | `parallel` | string | Group name for parallel execution |
 
+### Pipeline Inputs
+
+Define runtime parameters that users can configure when starting a pipeline:
+
+```json
+{
+  "name": "Parameterized Pipeline",
+  "env": "${inputs.ENV}",
+  "inputs": [
+    {
+      "name": "ENV",
+      "type": "select",
+      "label": "Environment",
+      "options": ["dev", "staging", "prod"],
+      "default": "dev"
+    },
+    {
+      "name": "verbose",
+      "type": "boolean",
+      "label": "Verbose output",
+      "default": false
+    }
+  ],
+  "steps": [...]
+}
+```
+
+| Input Type | Description |
+|------------|-------------|
+| `string` | Text input field |
+| `boolean` | Checkbox |
+| `select` | Dropdown with predefined options |
+
+### Dynamic Environment
+
+The `env` field supports interpolation, allowing environment selection at runtime:
+
+```json
+{
+  "env": "${inputs.ENV}",
+  "inputs": [
+    { "name": "ENV", "type": "select", "options": ["dev", "prod"] }
+  ]
+}
+```
+
 ### Variable Interpolation
 
-Access data from previous steps in parameters:
+Access data from previous steps and inputs in parameters:
 
 - `${prev}` — Result of the previous step
 - `${results.stepName}` — Result of a named step
 - `${results.stepName.field}` — Nested field access
 - `${env.VAR_NAME}` — Environment variable
+- `${inputs.inputName}` — Runtime input value
+- `${pipelineId}` — Current pipeline ID
 
 ## Modules
 
@@ -230,6 +281,49 @@ Wait for a specified time.
   }
 }
 ```
+
+### notify
+
+Send notifications to messaging platforms (Telegram).
+
+```json
+{
+  "module": "notify",
+  "params": {
+    "type": "telegram",
+    "token": "${env.TG_BOT_TOKEN}",
+    "chatId": "${env.TG_CHAT_ID}",
+    "message": "Build completed!",
+    "parseMode": "HTML"
+  }
+}
+```
+
+### archive
+
+Create or extract ZIP archives.
+
+```json
+{
+  "module": "archive",
+  "params": {
+    "op": "zip",
+    "source": "./dist",
+    "output": "./artifacts/build.zip"
+  }
+}
+```
+
+## Smart Editor
+
+The pipeline editor includes intelligent autocomplete powered by Monaco Editor:
+
+- **Module suggestions** — Type `"module": "` to see available modules with descriptions
+- **Parameter hints** — Inside `"params": {}`, get suggestions for module-specific parameters
+- **Variable autocomplete** — Type `${` to see available interpolation variables
+- **Required/optional indicators** — Parameters marked as required or optional with defaults
+
+The editor also provides Quick Insert buttons for common variables like `${prev}`, `${results.}`, and environment variables.
 
 ## Parallel Execution
 

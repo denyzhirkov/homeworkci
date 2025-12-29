@@ -108,6 +108,7 @@ const navItems = [
   { id: 'pipeline-structure', label: 'Structure', indent: 1 },
   { id: 'pipeline-steps', label: 'Steps & Parallel', indent: 1 },
   { id: 'pipeline-inputs', label: 'Inputs', indent: 1 },
+  { id: 'dynamic-env', label: 'Dynamic Environment', indent: 1 },
   { id: 'pipeline-results', label: 'Results & Variables', indent: 1 },
   { id: 'modules', label: 'Modules', indent: 0 },
   { id: 'mod-shell', label: 'shell', indent: 1 },
@@ -119,6 +120,7 @@ const navItems = [
   { id: 'mod-docker', label: 'docker', indent: 1 },
   { id: 'mod-archive', label: 'archive', indent: 1 },
   { id: 'variables', label: 'Variables', indent: 0 },
+  { id: 'editor', label: 'Smart Editor', indent: 0 },
 ];
 
 export default function Documentation() {
@@ -295,6 +297,39 @@ export default function Documentation() {
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
           Input types: <code>string</code>, <code>boolean</code>, <code>select</code>. 
           Access inputs in steps via <code>{"${inputs.name}"}</code>.
+        </Typography>
+
+        <Typography id="dynamic-env" variant="h6" sx={{ mt: 3, mb: 1, scrollMarginTop: 80 }}>
+          Dynamic Environment
+        </Typography>
+        <Typography variant="body2" paragraph>
+          The <code>env</code> field supports interpolation, allowing you to select the environment at runtime 
+          based on input parameters. This is useful for pipelines that need to run against different environments.
+        </Typography>
+        <CodeBlock>{`{
+  "name": "Deploy Pipeline",
+  "env": "\${inputs.ENV}",
+  "inputs": [
+    {
+      "name": "ENV",
+      "type": "select",
+      "label": "Target Environment",
+      "options": ["dev", "staging", "prod"],
+      "default": "dev"
+    }
+  ],
+  "steps": [
+    {
+      "module": "shell",
+      "params": {
+        "cmd": "echo 'Deploying to \${inputs.ENV}...'"
+      }
+    }
+  ]
+}`}</CodeBlock>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+          When the pipeline runs, the user selects an environment, and variables from that environment 
+          are loaded automatically. The environment chip in the header will animate to show it's dynamic.
         </Typography>
 
         <Typography id="pipeline-results" variant="h6" sx={{ mt: 3, mb: 1, scrollMarginTop: 80 }}>
@@ -520,25 +555,74 @@ export default function Documentation() {
         <SectionHeader id="variables" title="Variables" subtitle="Configuration management" />
         <Typography variant="body2" paragraph>
           Variables allow you to store configuration values that can be used across pipelines. 
+          All variables are accessed via <code>{"${env.VARIABLE_NAME}"}</code> in step parameters.
           There are two types of variables:
         </Typography>
         
         <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Global Variables</Typography>
         <Typography variant="body2" paragraph>
-          Available in all pipelines regardless of environment. Use for values that don't change between environments 
-          (API endpoints, default timeouts, etc.).
+          Available in <strong>all pipelines</strong> regardless of environment. Use for values that don't change 
+          between environments (API base URLs, notification settings, common paths, etc.).
         </Typography>
-        
-        <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Environment Variables</Typography>
-        <Typography variant="body2" paragraph>
-          Defined per environment (e.g., "production", "staging"). When a pipeline specifies an environment 
-          via the <code>env</code> field, those variables are merged with global variables.
-        </Typography>
-        
-        <CodeBlock>{`// Pipeline with environment
+        <CodeBlock>{`// Example: Global variables in config/variables.json
 {
-  "name": "Deploy",
-  "env": "production",
+  "global": {
+    "NOTIFY_CHAT_ID": "-1001234567890",
+    "API_BASE_URL": "https://api.example.com",
+    "DEFAULT_TIMEOUT": "30000"
+  },
+  "environments": { ... }
+}
+
+// Using global variables in any pipeline (no "env" required)
+{
+  "name": "Simple Pipeline",
+  "steps": [
+    {
+      "module": "http",
+      "params": {
+        "url": "\${env.API_BASE_URL}/health"
+      }
+    },
+    {
+      "module": "notify",
+      "params": {
+        "type": "telegram",
+        "chatId": "\${env.NOTIFY_CHAT_ID}",
+        "message": "Health check completed!"
+      }
+    }
+  ]
+}`}</CodeBlock>
+        
+        <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>Environment Variables</Typography>
+        <Typography variant="body2" paragraph>
+          Defined per environment (e.g., "production", "staging", "dev"). When a pipeline specifies an environment 
+          via the <code>env</code> field, those variables are <strong>merged</strong> with global variables.
+          Environment-specific values override global values with the same name.
+        </Typography>
+        <CodeBlock>{`// Example: Environment variables in config/variables.json
+{
+  "global": {
+    "LOG_LEVEL": "info"
+  },
+  "environments": {
+    "dev": {
+      "DEPLOY_HOST": "dev.example.com",
+      "DEPLOY_TOKEN": "dev-token-xxx",
+      "LOG_LEVEL": "debug"
+    },
+    "prod": {
+      "DEPLOY_HOST": "example.com",
+      "DEPLOY_TOKEN": "prod-token-yyy"
+    }
+  }
+}
+
+// Pipeline using "dev" environment
+{
+  "name": "Deploy to Dev",
+  "env": "dev",
   "steps": [
     {
       "module": "shell",
@@ -547,10 +631,66 @@ export default function Documentation() {
       }
     }
   ]
-}`}</CodeBlock>
+}
+// Result: DEPLOY_HOST=dev.example.com, LOG_LEVEL=debug (overridden)`}</CodeBlock>
+
+        <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>Variable Priority</Typography>
+        <Typography variant="body2" paragraph>
+          Variables are merged in the following order (later values override earlier):
+        </Typography>
+        <Box component="ol" sx={{ pl: 3, '& li': { mb: 0.5 } }}>
+          <li><Typography variant="body2"><strong>System environment</strong> — Filtered safe variables (PATH, HOME, USER, etc.)</Typography></li>
+          <li><Typography variant="body2"><strong>Global variables</strong> — From <code>config/variables.json</code></Typography></li>
+          <li><Typography variant="body2"><strong>Environment variables</strong> — From selected environment</Typography></li>
+        </Box>
+        
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          Variables are accessed via <code>{"${env.VARIABLE_NAME}"}</code> in step parameters. 
-          Manage variables on the Variables page.
+          Manage variables on the <strong>Variables</strong> page. Changes take effect immediately for new pipeline runs.
+        </Typography>
+
+        <Divider sx={{ my: 4 }} />
+
+        {/* Smart Editor */}
+        <SectionHeader id="editor" title="Smart Editor" subtitle="Intelligent autocomplete" />
+        <Typography variant="body2" paragraph>
+          The pipeline editor includes intelligent autocomplete powered by Monaco Editor (the same editor used in VS Code). 
+          It provides context-aware suggestions as you type.
+        </Typography>
+        
+        <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Module Suggestions</Typography>
+        <Typography variant="body2" paragraph>
+          When typing <code>"module": "</code>, the editor suggests all available modules with descriptions. 
+          Built-in modules are prioritized, and custom modules are also included.
+        </Typography>
+        
+        <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Parameter Hints</Typography>
+        <Typography variant="body2" paragraph>
+          Inside <code>"params": {"{}"}</code>, the editor suggests parameters specific to the selected module. 
+          Each parameter shows:
+        </Typography>
+        <Box component="ul" sx={{ pl: 3, '& li': { mb: 0.5 } }}>
+          <li><Typography variant="body2"><strong>Required</strong> — Parameters that must be provided</Typography></li>
+          <li><Typography variant="body2"><strong>Optional</strong> — Parameters with default values</Typography></li>
+          <li><Typography variant="body2"><strong>Enum values</strong> — For parameters with predefined options (e.g., <code>op: "zip" | "unzip"</code>)</Typography></li>
+          <li><Typography variant="body2"><strong>Type information</strong> — string, number, boolean, object</Typography></li>
+        </Box>
+        
+        <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Variable Autocomplete</Typography>
+        <Typography variant="body2" paragraph>
+          When typing <code>{"${"}</code> inside a string value, the editor suggests available interpolation variables:
+        </Typography>
+        <Box component="ul" sx={{ pl: 3, '& li': { mb: 0.5 } }}>
+          <li><Typography variant="body2"><code>{"${prev}"}</code> — Previous step result</Typography></li>
+          <li><Typography variant="body2"><code>{"${results.stepName}"}</code> — Named step results</Typography></li>
+          <li><Typography variant="body2"><code>{"${inputs.paramName}"}</code> — Pipeline input values</Typography></li>
+          <li><Typography variant="body2"><code>{"${env.VAR_NAME}"}</code> — Environment variables (with suggestions from your configured variables)</Typography></li>
+          <li><Typography variant="body2"><code>{"${pipelineId}"}</code> — Current pipeline ID</Typography></li>
+        </Box>
+        
+        <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Quick Insert Panel</Typography>
+        <Typography variant="body2" paragraph>
+          Above the editor, a Quick Insert panel provides one-click buttons for common variables. 
+          Click any variable chip to insert it at the cursor position.
         </Typography>
       </Box>
     </Box>

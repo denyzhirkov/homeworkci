@@ -47,6 +47,68 @@
 
 import type { PipelineContext } from "../server/types/index.ts";
 
+/** Schema for editor hints */
+export const schema = {
+  params: {
+    image: {
+      type: "string",
+      required: false,
+      default: "node:20-alpine",
+      description: "Docker image to use. If not specified, uses default from config."
+    },
+    cmd: {
+      type: "string",
+      required: true,
+      description: "Command to execute inside container"
+    },
+    workdir: {
+      type: "string",
+      required: false,
+      default: "/workspace",
+      description: "Working directory inside container"
+    },
+    network: {
+      type: "string",
+      required: false,
+      default: "bridge",
+      enum: ["none", "bridge", "host"],
+      description: "Docker network mode"
+    },
+    memory: {
+      type: "string",
+      required: false,
+      description: "Memory limit (e.g., '512m', '1g')"
+    },
+    cpus: {
+      type: "string",
+      required: false,
+      description: "CPU limit (e.g., '1', '0.5')"
+    },
+    env: {
+      type: "object",
+      required: false,
+      description: "Additional environment variables for container"
+    },
+    timeout: {
+      type: "number",
+      required: false,
+      description: "Timeout in milliseconds"
+    },
+    reuse: {
+      type: "boolean",
+      required: false,
+      default: false,
+      description: "Reuse container across steps with reuse:true (faster execution)"
+    },
+    removeImage: {
+      type: "boolean",
+      required: false,
+      default: false,
+      description: "Remove Docker image after execution (cleanup)"
+    }
+  }
+};
+
 // Import dynamically to work both in server and standalone contexts
 let runContainer: typeof import("../server/docker-manager.ts").runContainer;
 let config: typeof import("../server/config.ts").config;

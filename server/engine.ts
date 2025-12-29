@@ -209,8 +209,17 @@ export async function runPipeline(id: string, runtimeInputs?: Record<string, str
     log(sanitizeLogMessage(msg));
   };
 
+  // Interpolate pipeline.env to support ${inputs.VAR} syntax for dynamic environment selection
+  let resolvedPipelineEnv = pipeline.env;
+  if (pipeline.env && pipeline.env.includes("${")) {
+    // Create minimal context for env interpolation (only inputs available at this point)
+    const envInterpolationCtx = { inputs } as unknown as PipelineContext;
+    resolvedPipelineEnv = interpolate(pipeline.env, envInterpolationCtx) as string;
+    sanitizedLog(`[Engine] Resolved environment: ${pipeline.env} → ${resolvedPipelineEnv}`);
+  }
+
   // Create context
-  const mergedEnv = await getMergedEnv(pipeline.env);
+  const mergedEnv = await getMergedEnv(resolvedPipelineEnv);
   const ctx = createPipelineContext(sandboxPath, mergedEnv, id, startTime, sanitizedLog, controller.signal, inputs);
 
   sanitizedLog(`[Sandbox] Created isolated working directory: ${sandboxPath}`);

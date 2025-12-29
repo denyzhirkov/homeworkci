@@ -12,6 +12,28 @@
 // - Read: string (file content)
 // - Write: { "success": true }
 
+/** Schema for editor hints */
+export const schema = {
+  params: {
+    op: {
+      type: "string",
+      required: true,
+      enum: ["read", "write"],
+      description: "File operation: read or write"
+    },
+    path: {
+      type: "string",
+      required: true,
+      description: "File path (relative to sandbox or absolute)"
+    },
+    content: {
+      type: "string",
+      required: false,
+      description: "Content to write (required for write operation)"
+    }
+  }
+};
+
 import { ensureDir } from "@std/fs";
 import { dirname } from "@std/path";
 import type { PipelineContext } from "../server/types/index.ts";

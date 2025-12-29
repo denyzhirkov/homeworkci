@@ -58,6 +58,39 @@
 
 import type { PipelineContext } from "../server/types/index.ts";
 
+/** Schema for editor hints */
+export const schema = {
+  params: {
+    type: {
+      type: "string",
+      required: true,
+      enum: ["telegram"],
+      description: "Notification platform type"
+    },
+    token: {
+      type: "string",
+      required: true,
+      description: "Bot API token (use ${env.TG_BOT_TOKEN} for security)"
+    },
+    chatId: {
+      type: "string",
+      required: true,
+      description: "Chat or channel ID (use ${env.TG_CHAT_ID} for security)"
+    },
+    message: {
+      type: "string",
+      required: true,
+      description: "Message text. Supports interpolation: ${results.build.code}"
+    },
+    parseMode: {
+      type: "string",
+      required: false,
+      enum: ["HTML", "Markdown"],
+      description: "Message parse mode for formatting"
+    }
+  }
+};
+
 export interface NotifyParams {
   type: "telegram";
   token: string;

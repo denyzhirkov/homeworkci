@@ -15,6 +15,34 @@
 
 import type { PipelineContext, ModuleResult } from "../server/types/index.ts";
 
+/** Schema for editor hints */
+export const schema = {
+  params: {
+    url: {
+      type: "string",
+      required: true,
+      description: "Request URL. Supports interpolation: ${env.API_URL}/endpoint"
+    },
+    method: {
+      type: "string",
+      required: false,
+      default: "GET",
+      enum: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+      description: "HTTP method"
+    },
+    body: {
+      type: "object",
+      required: false,
+      description: "Request body (automatically JSON-encoded for POST/PUT/PATCH)"
+    },
+    headers: {
+      type: "object",
+      required: false,
+      description: "Custom HTTP headers"
+    }
+  }
+};
+
 export async function run(ctx: PipelineContext, params: { url: string; method?: string; body?: unknown }): Promise<ModuleResult> {
   try {
     const res = await fetch(params.url, {

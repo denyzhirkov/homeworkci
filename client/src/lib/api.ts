@@ -47,6 +47,21 @@ export interface ModuleDetails {
   isBuiltIn: boolean;
 }
 
+// Schema types for editor hints
+export interface ParamSchema {
+  type: "string" | "number" | "boolean" | "object" | "array";
+  required: boolean;
+  description: string;
+  default?: unknown;
+  enum?: string[];
+}
+
+export interface ModuleSchema {
+  params: Record<string, ParamSchema>;
+}
+
+export type ModuleSchemasMap = Record<string, ModuleSchema>;
+
 export interface RunResult {
   success: boolean;
   duration: number;
@@ -120,6 +135,9 @@ export const saveModule = (id: string, source: string) =>
 
 export const deleteModule = (id: string) => 
   api.delete<{ success: boolean }>(`/modules/${encodeURIComponent(id)}`);
+
+export const getModuleSchemas = () => 
+  api.get<ModuleSchemasMap>("/modules/schemas");
 
 // --- Variables ---
 

@@ -13,6 +13,17 @@
 
 import type { PipelineContext } from "../server/types/index.ts";
 
+/** Schema for editor hints */
+export const schema = {
+  params: {
+    cmd: {
+      type: "string",
+      required: true,
+      description: "Shell command to execute. Supports pipes, && and ; operators."
+    }
+  }
+};
+
 export async function run(ctx: PipelineContext, params: { cmd: string }): Promise<{ code: number }> {
   if (ctx.log) ctx.log(`[Shell] Executing: ${params.cmd}`);
 

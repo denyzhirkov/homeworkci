@@ -11,6 +11,17 @@
 
 import type { PipelineContext } from "../server/types/index.ts";
 
+/** Schema for editor hints */
+export const schema = {
+  params: {
+    ms: {
+      type: "number",
+      required: true,
+      description: "Delay duration in milliseconds"
+    }
+  }
+};
+
 export async function run(ctx: PipelineContext, params: { ms: number }): Promise<{ waited: number }> {
   console.log(`[Delay] Sleeping for ${params.ms}ms...`);
   

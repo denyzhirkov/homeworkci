@@ -70,6 +70,28 @@
 // For "zip" operation: source can be a file or directory.
 // For "unzip" operation: source must be a ZIP file, output is the extraction directory.
 
+/** Schema for editor hints */
+export const schema = {
+  params: {
+    op: {
+      type: "string",
+      required: true,
+      enum: ["zip", "unzip"],
+      description: "Archive operation: zip (create) or unzip (extract)"
+    },
+    source: {
+      type: "string",
+      required: true,
+      description: "Source path: directory/file for zip, ZIP file for unzip"
+    },
+    output: {
+      type: "string",
+      required: true,
+      description: "Output path: ZIP file for zip, directory for unzip"
+    }
+  }
+};
+
 import { ensureDir, walk } from "@std/fs";
 import { dirname, join, relative } from "@std/path";
 import JSZip from "jszip";
