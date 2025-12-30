@@ -15,6 +15,7 @@ import {
   Chip,
   Stack,
   Tooltip,
+  Autocomplete,
 } from "@mui/material";
 import { Delete, ExpandMore, ExpandLess } from "@mui/icons-material";
 import type { PipelineStep, ModuleInfo, ParamSchema, ModuleSchemasMap } from "../lib/api";
@@ -24,6 +25,7 @@ interface InnerStepCardProps {
   index: number;
   modules: ModuleInfo[];
   moduleSchemas: ModuleSchemasMap;
+  availableStepNames: string[]; // Names of steps that can be used as dependencies
   onChange: (step: PipelineStep) => void;
   onDelete: () => void;
   readOnly?: boolean;
@@ -35,6 +37,7 @@ export default function InnerStepCard({
   index,
   modules,
   moduleSchemas,
+  availableStepNames,
   onChange,
   onDelete,
   readOnly = false,
@@ -301,6 +304,47 @@ export default function InnerStepCard({
               disabled={readOnly}
               fullWidth
             />
+
+            {/* Dependencies */}
+            {availableStepNames.length > 0 && (
+              <Autocomplete
+                multiple
+                freeSolo
+                size="small"
+                options={availableStepNames}
+                value={
+                  step.dependsOn
+                    ? Array.isArray(step.dependsOn)
+                      ? step.dependsOn
+                      : [step.dependsOn]
+                    : []
+                }
+                onChange={(_, newValue) =>
+                  updateStep({
+                    dependsOn: newValue.length > 0 ? newValue : undefined,
+                  })
+                }
+                disabled={readOnly}
+                renderTags={(value, getTagProps) =>
+                  value.map((option, i) => (
+                    <Chip
+                      {...getTagProps({ index: i })}
+                      key={option}
+                      label={option}
+                      size="small"
+                      color="info"
+                    />
+                  ))
+                }
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Depends On"
+                    placeholder="Select dependencies"
+                  />
+                )}
+              />
+            )}
 
             {/* Module parameters */}
             {step.module && schema && (

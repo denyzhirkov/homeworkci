@@ -106,6 +106,7 @@ export function registerPipelineHints(monaco: Monaco, context: HintsContext): vo
           { key: "description", desc: "Human-readable step description", required: false },
           { key: "module", desc: "Module to execute (required)", required: true },
           { key: "params", desc: "Module parameters", required: false },
+          { key: "dependsOn", desc: "Step names this step depends on (must succeed first)", required: false },
         ];
 
         return {

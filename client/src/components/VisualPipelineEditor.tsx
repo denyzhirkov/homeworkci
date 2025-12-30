@@ -262,6 +262,23 @@ export default function VisualPipelineEditor({
     return Array.isArray(item);
   };
 
+  // Get step names defined before a given step index (for dependsOn options)
+  const getStepNamesBeforeIndex = (stepIndex: number): string[] => {
+    const names: string[] = [];
+    for (let i = 0; i < stepIndex; i++) {
+      const item = pipeline.steps[i];
+      if (Array.isArray(item)) {
+        // Parallel group: collect all named steps
+        for (const step of item) {
+          if (step.name) names.push(step.name);
+        }
+      } else {
+        if (item.name) names.push(item.name);
+      }
+    }
+    return names;
+  };
+
   // Count total individual steps for display
   const totalStepCount = pipeline.steps.reduce(
     (sum, item) => sum + (Array.isArray(item) ? item.length : 1),
@@ -448,6 +465,7 @@ export default function VisualPipelineEditor({
                     index={index}
                     modules={availableModules}
                     moduleSchemas={moduleSchemas}
+                    availableStepNames={getStepNamesBeforeIndex(index)}
                     onChange={(updated) => updateStepItem(index, updated)}
                     onDelete={() => deleteStepItem(index)}
                     readOnly={readOnly}
@@ -458,6 +476,7 @@ export default function VisualPipelineEditor({
                     index={index}
                     modules={availableModules}
                     moduleSchemas={moduleSchemas}
+                    availableStepNames={getStepNamesBeforeIndex(index)}
                     onChange={(updated) => updateStepItem(index, updated)}
                     onDelete={() => deleteStepItem(index)}
                     readOnly={readOnly}

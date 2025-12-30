@@ -15,6 +15,7 @@ import {
   Chip,
   Stack,
   Tooltip,
+  Autocomplete,
 } from "@mui/material";
 import {
   DragIndicator,
@@ -31,6 +32,7 @@ interface StepCardProps {
   index: number;
   modules: ModuleInfo[];
   moduleSchemas: ModuleSchemasMap;
+  availableStepNames: string[]; // Names of steps that can be used as dependencies
   onChange: (step: PipelineStep) => void;
   onDelete: () => void;
   readOnly?: boolean;
@@ -41,6 +43,7 @@ export default function StepCard({
   index,
   modules,
   moduleSchemas,
+  availableStepNames,
   onChange,
   onDelete,
   readOnly = false,
@@ -324,6 +327,48 @@ export default function StepCard({
               disabled={readOnly}
               fullWidth
             />
+
+            {/* Dependencies */}
+            {availableStepNames.length > 0 && (
+              <Autocomplete
+                multiple
+                freeSolo
+                size="small"
+                options={availableStepNames}
+                value={
+                  step.dependsOn
+                    ? Array.isArray(step.dependsOn)
+                      ? step.dependsOn
+                      : [step.dependsOn]
+                    : []
+                }
+                onChange={(_, newValue) =>
+                  updateStep({
+                    dependsOn: newValue.length > 0 ? newValue : undefined,
+                  })
+                }
+                disabled={readOnly}
+                renderTags={(value, getTagProps) =>
+                  value.map((option, i) => (
+                    <Chip
+                      {...getTagProps({ index: i })}
+                      key={option}
+                      label={option}
+                      size="small"
+                      color="info"
+                    />
+                  ))
+                }
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Depends On"
+                    placeholder="Select steps this depends on"
+                    helperText="This step will only run if all dependencies succeed"
+                  />
+                )}
+              />
+            )}
 
             {/* Module parameters */}
             {step.module && schema && (

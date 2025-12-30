@@ -227,8 +227,22 @@ export async function runPipeline(id: string, runtimeInputs?: Record<string, str
   // Normalize steps: single steps become [step], arrays stay as parallel groups
   const stepGroups = normalizeSteps(pipeline.steps);
 
+  // Validate dependencies before execution
+  try {
+    validateDependencies(stepGroups);
+  } catch (e: unknown) {
+    const errorMsg = e instanceof Error ? e.message : String(e);
+    sanitizedLog(`[Engine] Dependency validation failed: ${errorMsg}`);
+    throw e;
+  }
+
+  // Track step execution status for dependency checking
+  const stepStatuses = new Map<string, boolean>();
+
   // Execute step function
   const executeStep = async (step: PipelineStep, stepIndex: number) => {
+    // Check dependencies before execution
+    checkDependencies(step, stepStatuses, sanitizedLog);
     const stepName = step.description || step.name || step.module;
     log(`Running step: ${stepName}`);
     pubsub.publish({ type: "step-start", pipelineId: id, payload: { runId, step: stepName, stepIndex, totalSteps } });
@@ -249,11 +263,15 @@ export async function runPipeline(id: string, runtimeInputs?: Record<string, str
       log(`Step '${stepName}' completed. Result: ${JSON.stringify(result)}`);
       pubsub.publish({ type: "step-end", pipelineId: id, payload: { runId, step: stepName, stepIndex, totalSteps, success: true } });
       endStep(stepId, true, result);
+      // Track success for dependency checking
+      if (step.name) stepStatuses.set(step.name, true);
       return { step, result, stepIndex };
     } catch (e: unknown) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       pubsub.publish({ type: "step-end", pipelineId: id, payload: { runId, step: stepName, stepIndex, totalSteps, success: false, error: errorMsg } });
       endStep(stepId, false, undefined, errorMsg);
+      // Track failure for dependency checking
+      if (step.name) stepStatuses.set(step.name, false);
       throw e;
     }
   };
@@ -324,4 +342,79 @@ function normalizeSteps(steps: StepItem[]): PipelineStep[][] {
 // Count total individual steps (for progress tracking)
 function countTotalSteps(steps: StepItem[]): number {
   return steps.reduce((sum, item) => sum + (Array.isArray(item) ? item.length : 1), 0);
+}
+
+// Normalize dependsOn to array
+function normalizeDependsOn(dependsOn?: string | string[]): string[] {
+  if (!dependsOn) return [];
+  return Array.isArray(dependsOn) ? dependsOn : [dependsOn];
+}
+
+// Get all step names defined before a given step index (for validation)
+function getStepNamesBeforeIndex(stepGroups: PipelineStep[][], targetGroupIndex: number, targetIndexInGroup: number): Set<string> {
+  const names = new Set<string>();
+  
+  for (let g = 0; g < stepGroups.length; g++) {
+    const group = stepGroups[g];
+    for (let s = 0; s < group.length; s++) {
+      // Stop if we've reached the target step
+      if (g === targetGroupIndex && s >= targetIndexInGroup) break;
+      if (g > targetGroupIndex) break;
+      
+      const step = group[s];
+      if (step.name) names.add(step.name);
+    }
+    if (g >= targetGroupIndex) break;
+  }
+  
+  return names;
+}
+
+// Validate that all dependsOn references point to steps that come before
+function validateDependencies(stepGroups: PipelineStep[][]): void {
+  for (let g = 0; g < stepGroups.length; g++) {
+    const group = stepGroups[g];
+    for (let s = 0; s < group.length; s++) {
+      const step = group[s];
+      const deps = normalizeDependsOn(step.dependsOn);
+      
+      if (deps.length === 0) continue;
+      
+      const availableNames = getStepNamesBeforeIndex(stepGroups, g, s);
+      
+      for (const dep of deps) {
+        if (!availableNames.has(dep)) {
+          const stepName = step.description || step.name || step.module;
+          throw new Error(
+            `Step "${stepName}" depends on "${dep}" which is not defined before it. ` +
+            `Available step names: ${[...availableNames].join(", ") || "(none)"}`
+          );
+        }
+      }
+    }
+  }
+}
+
+// Check if all dependencies of a step have succeeded
+function checkDependencies(
+  step: PipelineStep, 
+  stepStatuses: Map<string, boolean>,
+  log: (msg: string) => void
+): void {
+  const deps = normalizeDependsOn(step.dependsOn);
+  if (deps.length === 0) return;
+  
+  const stepName = step.description || step.name || step.module;
+  
+  for (const dep of deps) {
+    const status = stepStatuses.get(dep);
+    if (status === undefined) {
+      throw new Error(`Step "${stepName}" depends on "${dep}" which has not been executed`);
+    }
+    if (status === false) {
+      throw new Error(`Step "${stepName}" depends on "${dep}" which failed`);
+    }
+  }
+  
+  log(`Dependencies satisfied for "${stepName}": ${deps.join(", ")}`);
 }

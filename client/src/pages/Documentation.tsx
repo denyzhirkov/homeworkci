@@ -264,6 +264,30 @@ export default function Documentation() {
           parallel steps to complete before continuing to the next step.
         </Typography>
 
+        <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
+          Step Dependencies (dependsOn)
+        </Typography>
+        <Typography variant="body2" paragraph>
+          Use <code>dependsOn</code> to specify that a step should only run if certain previous steps succeeded.
+          The value can be a single step name or an array of step names.
+        </Typography>
+        <CodeBlock>{`{
+  "steps": [
+    { "name": "build", "module": "shell", "params": { "cmd": "npm run build" } },
+    { "name": "test", "module": "shell", "params": { "cmd": "npm test" } },
+    { 
+      "name": "deploy", 
+      "module": "shell", 
+      "params": { "cmd": "deploy.sh" },
+      "dependsOn": ["build", "test"]
+    }
+  ]
+}`}</CodeBlock>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+          If any dependency fails, the pipeline stops with an error. Dependencies must reference 
+          steps defined before the current step.
+        </Typography>
+
         <Typography id="pipeline-inputs" variant="h6" sx={{ mt: 3, mb: 1, scrollMarginTop: 80 }}>
           Inputs
         </Typography>

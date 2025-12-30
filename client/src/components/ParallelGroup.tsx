@@ -35,6 +35,7 @@ interface ParallelGroupProps {
   index: number;
   modules: ModuleInfo[];
   moduleSchemas: ModuleSchemasMap;
+  availableStepNames: string[]; // Names of steps that can be used as dependencies
   onChange: (steps: PipelineStep[]) => void;
   onDelete: () => void;
   readOnly?: boolean;
@@ -45,6 +46,7 @@ export default function ParallelGroup({
   index,
   modules,
   moduleSchemas,
+  availableStepNames,
   onChange,
   onDelete,
   readOnly = false,
@@ -177,6 +179,7 @@ export default function ParallelGroup({
               index={stepIndex}
               modules={availableModules}
               moduleSchemas={moduleSchemas}
+              availableStepNames={availableStepNames}
               onChange={(updated) => updateStep(stepIndex, updated)}
               onDelete={() => deleteStep(stepIndex)}
               readOnly={readOnly}

@@ -101,6 +101,7 @@ Pipelines are JSON files in the `pipelines/` directory:
 | `description` | string | Step description |
 | `module` | string | Module to execute: `shell`, `docker`, `http`, `git`, `fs`, `delay` |
 | `params` | object | Module-specific parameters |
+| `dependsOn` | string \| string[] | Step names this step depends on (must succeed first) |
 
 ### Pipeline Inputs
 
@@ -423,6 +424,29 @@ To run steps in parallel, wrap them in a nested array:
 ```
 
 Steps inside a nested array execute simultaneously. The pipeline waits for all parallel steps to complete before continuing to the next step.
+
+## Step Dependencies
+
+Use `dependsOn` to make a step conditional on the success of previous steps:
+
+```json
+{
+  "steps": [
+    { "name": "build", "module": "shell", "params": { "cmd": "npm run build" } },
+    { "name": "test", "module": "shell", "params": { "cmd": "npm test" } },
+    { 
+      "name": "deploy", 
+      "module": "shell", 
+      "params": { "cmd": "./deploy.sh" },
+      "dependsOn": ["build", "test"]
+    }
+  ]
+}
+```
+
+- If any dependency fails, the pipeline stops with an error
+- Dependencies must reference steps defined before the current step
+- Use a string for single dependency or array for multiple
 
 ## Docker Deployment
 

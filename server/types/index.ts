@@ -19,6 +19,7 @@ export interface PipelineStep {
   description?: string;
   module: string;
   params?: Record<string, unknown>;
+  dependsOn?: string | string[]; // Step names this step depends on (must succeed first)
 }
 
 // A step item can be a single step or an array of parallel steps
