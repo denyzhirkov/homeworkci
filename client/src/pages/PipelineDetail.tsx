@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
-  ArrowBack, Save, PlayArrow, CheckCircle, PriorityHigh, Cancel, Delete, Edit, Stop, Settings
+  ArrowBack, Save, PlayArrow, CheckCircle, PriorityHigh, Cancel, Delete, Edit, Stop, Settings, Pause, AccessTime
 } from "@mui/icons-material";
 import {
   Box, Typography, Button, Paper, IconButton,
@@ -12,13 +12,14 @@ import {
 } from "@mui/material";
 import { Add, LocalOffer, Code, ViewModule } from "@mui/icons-material";
 import Editor, { type Monaco } from "@monaco-editor/react";
-import { getPipeline, savePipeline, runPipeline, stopPipeline, type Pipeline, type PipelineInput, getRunHistory, getRunLog, deletePipeline, createPipeline, getVariables, type VariablesConfig, getModules, getModuleSchemas, type ModuleInfo, type ModuleSchemasMap } from "../lib/api";
+import { getPipeline, savePipeline, runPipeline, stopPipeline, toggleSchedulePause, type Pipeline, type PipelineInput, getRunHistory, getRunLog, deletePipeline, createPipeline, getVariables, type VariablesConfig, getModules, getModuleSchemas, type ModuleInfo, type ModuleSchemasMap } from "../lib/api";
 import type { editor } from "monaco-editor";
 import { useWebSocket, type WSEvent } from "../lib/useWebSocket";
 import LogViewer from "../components/LogViewer";
 import VisualPipelineEditor from "../components/VisualPipelineEditor";
 import { initializeInputValues } from "../lib/pipeline-inputs";
 import { registerPipelineHints, disposePipelineHints } from "../lib/monaco-pipeline-hints";
+import { getNextRunInfo } from "../lib/schedule";
 
 type RunEntry = {
   pipelineId: string;
@@ -313,6 +314,16 @@ export default function PipelineDetail() {
     }
   };
 
+  const handleToggleSchedule = async () => {
+    if (!id || !pipeline?.schedule) return;
+    try {
+      const result = await toggleSchedulePause(id);
+      setPipeline(prev => prev ? { ...prev, schedulePaused: result.schedulePaused } : null);
+    } catch (e) {
+      console.error("Error toggling schedule:", e);
+    }
+  };
+
   const handleDelete = async () => {
     if (!id) return;
     try {
@@ -365,14 +376,83 @@ export default function PipelineDetail() {
           )}
           {isRunning && <Chip size="small" label="Running" color="success" />}
           {pipeline?.isDemo && <Chip size="small" label="Demo" color="info" />}
+          {pipeline?.schedule && !isRunning && (() => {
+            const nextInfo = !pipeline.schedulePaused ? getNextRunInfo(pipeline.schedule) : null;
+            return (
+              <Tooltip 
+                title={pipeline.schedulePaused 
+                  ? `Schedule paused (${pipeline.schedule})` 
+                  : nextInfo 
+                    ? `Next run in ${nextInfo.timeLeft} (${pipeline.schedule})` 
+                    : `Schedule: ${pipeline.schedule}`
+                } 
+                arrow
+              >
+                <Chip 
+                  icon={pipeline.schedulePaused ? <Pause sx={{ fontSize: 14 }} /> : <AccessTime sx={{ fontSize: 14 }} />}
+                  size="small" 
+                  label={pipeline.schedulePaused ? "Paused" : (nextInfo ? `Next: ${nextInfo.timeLeft}` : pipeline.schedule)} 
+                  color={pipeline.schedulePaused ? "warning" : "info"}
+                  sx={{ fontWeight: 500, opacity: pipeline.schedulePaused ? 0.8 : 1 }}
+                />
+              </Tooltip>
+            );
+          })()}
         </Box>
         <Stack direction="row" spacing={1}>
           {isRunning ? (
-            <Button variant="contained" color="error" size="small" startIcon={<Stop />} onClick={handleStop}>
-              Stop
-            </Button>
+            pipeline?.schedule ? (
+              // Scheduled pipeline stop button - different style (warning color, pause icon)
+              <Tooltip title="Stop scheduled pipeline run" arrow>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<Pause />}
+                  onClick={handleStop}
+                  sx={{
+                    bgcolor: "warning.main",
+                    color: "warning.contrastText",
+                    "&:hover": { bgcolor: "warning.dark" },
+                  }}
+                >
+                  Stop
+                </Button>
+              </Tooltip>
+            ) : (
+              // Regular pipeline stop button
+              <Tooltip title="Stop pipeline" arrow>
+                <Button variant="contained" color="error" size="small" startIcon={<Stop />} onClick={handleStop}>
+                  Stop
+                </Button>
+              </Tooltip>
+            )
           ) : (
             <>
+              {/* Schedule pause/resume button */}
+              {pipeline?.schedule && (
+                <Tooltip title={pipeline.schedulePaused ? "Resume schedule" : "Pause schedule"} arrow>
+                  <Button
+                    size="small"
+                    variant={pipeline.schedulePaused ? "contained" : "outlined"}
+                    onClick={handleToggleSchedule}
+                    sx={{ 
+                      minWidth: 36, 
+                      px: 1,
+                      ...(pipeline.schedulePaused ? {
+                        bgcolor: "warning.main",
+                        color: "warning.contrastText",
+                        "&:hover": { bgcolor: "warning.dark" },
+                      } : {
+                        borderColor: "warning.main",
+                        color: "warning.main",
+                        "&:hover": { borderColor: "warning.dark", bgcolor: "rgba(237, 108, 2, 0.08)" },
+                      })
+                    }}
+                  >
+                    {pipeline.schedulePaused ? <PlayArrow fontSize="small" /> : <Pause fontSize="small" />}
+                  </Button>
+                </Tooltip>
+              )}
               {pipeline?.inputs && pipeline.inputs.length > 0 && (
                 <Tooltip title="Configure parameters" arrow>
                   <Button variant="contained" color="primary" size="small" onClick={handleOpenModal} disabled={isNew} sx={{ minWidth: 36, px: 1 }}>

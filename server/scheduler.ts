@@ -42,6 +42,7 @@ export class Scheduler {
 
     for (const p of pipelines) {
       if (!p.schedule) continue;
+      if (p.schedulePaused) continue; // Skip paused schedules
 
       try {
         // Check if it should run

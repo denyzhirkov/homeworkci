@@ -1,17 +1,18 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { PlayArrow, Schedule, Stop, FolderOpen, Settings } from "@mui/icons-material";
+import { PlayArrow, Stop, FolderOpen, Settings, Pause, AccessTime } from "@mui/icons-material";
 import {
   Box, Typography, Button, Card, CardContent, CardActions,
   Grid, Chip, Stack, Container, CircularProgress, LinearProgress, Accordion, AccordionSummary, AccordionDetails,
   Dialog, DialogTitle, DialogContent, DialogActions, FormControlLabel, Checkbox, Select, MenuItem, FormControl, InputLabel, TextField, Tooltip
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import { getPipelines, type Pipeline, type PipelineInput, runPipeline, stopPipeline, countSteps } from "../lib/api";
+import { getPipelines, type Pipeline, type PipelineInput, runPipeline, stopPipeline, toggleSchedulePause, countSteps } from "../lib/api";
 import { useWebSocket, type WSEvent } from "../lib/useWebSocket";
 import { LiveLogChip } from "../components/LiveLogChip";
 import TagFilter, { extractUniqueTags, filterByTags, groupByTags } from "../components/TagFilter";
 import { initializeInputValues } from "../lib/pipeline-inputs";
+import { getNextRunInfo } from "../lib/schedule";
 
 // Track progress for running pipelines: { pipelineId: { completed: number, total: number } }
 interface ProgressInfo {
@@ -29,6 +30,14 @@ export default function Pipelines() {
   const [showRunModal, setShowRunModal] = useState(false);
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
   const [inputValues, setInputValues] = useState<Record<string, string | boolean>>({});
+  
+  // Schedule countdown - force re-render every minute for countdown updates
+  const [, setScheduleTick] = useState(0);
+  
+  useEffect(() => {
+    const interval = setInterval(() => setScheduleTick(t => t + 1), 30000); // Update every 30s
+    return () => clearInterval(interval);
+  }, []);
 
   // Extract unique tags and filter/group pipelines
   const allTags = useMemo(() => extractUniqueTags(pipelines), [pipelines]);
@@ -129,6 +138,20 @@ export default function Pipelines() {
     }
   };
 
+  const handleToggleSchedule = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const result = await toggleSchedulePause(id);
+      // Update local state immediately
+      setPipelines(prev =>
+        prev.map(p => p.id === id ? { ...p, schedulePaused: result.schedulePaused } : p)
+      );
+    } catch (err) {
+      console.error("Error toggling schedule:", err);
+    }
+  };
+
   if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
   }
@@ -199,15 +222,29 @@ export default function Pipelines() {
                   {p.isDemo && (
                     <Chip label="Demo" size="small" color="info" />
                   )}
-                  {p.schedule && (
-                    <Chip
-                      icon={<Schedule />}
-                      label={p.schedule}
-                      size="small"
-                      color="primary"
-                      variant="outlined"
-                    />
-                  )}
+                  {p.schedule && (() => {
+                    const nextInfo = !p.schedulePaused ? getNextRunInfo(p.schedule) : null;
+                    return (
+                      <Tooltip 
+                        title={p.schedulePaused 
+                          ? `Schedule paused (${p.schedule})` 
+                          : nextInfo 
+                            ? `Next run in ${nextInfo.timeLeft} (${p.schedule})` 
+                            : `Schedule: ${p.schedule}`
+                        } 
+                        arrow
+                      >
+                        <Chip
+                          icon={p.schedulePaused ? <Pause sx={{ fontSize: 14 }} /> : <AccessTime sx={{ fontSize: 14 }} />}
+                          label={p.schedulePaused ? "Paused" : (nextInfo ? nextInfo.timeLeft : p.schedule)}
+                          size="small"
+                          color={p.schedulePaused ? "warning" : "info"}
+                          variant="filled"
+                          sx={{ fontWeight: 500, opacity: p.schedulePaused ? 0.8 : 1 }}
+                        />
+                      </Tooltip>
+                    );
+                  })()}
                   {p.isRunning && (
                     <Chip
                       icon={<CircularProgress size={12} color="inherit" />}
@@ -249,6 +286,31 @@ export default function Pipelines() {
               <CardActions disableSpacing sx={{ justifyContent: 'flex-end', borderTop: '1px solid #eee', gap: 0.5 }}>
                 {!p.isRunning ? (
                   <>
+                    {/* Schedule pause/resume button */}
+                    {p.schedule && (
+                      <Tooltip title={p.schedulePaused ? "Resume schedule" : "Pause schedule"} arrow>
+                        <Button
+                          size="small"
+                          variant={p.schedulePaused ? "contained" : "outlined"}
+                          onClick={(e) => handleToggleSchedule(e, p.id)}
+                          sx={{ 
+                            minWidth: 36, 
+                            px: 1,
+                            ...(p.schedulePaused ? {
+                              bgcolor: "warning.main",
+                              color: "warning.contrastText",
+                              "&:hover": { bgcolor: "warning.dark" },
+                            } : {
+                              borderColor: "warning.main",
+                              color: "warning.main",
+                              "&:hover": { borderColor: "warning.dark", bgcolor: "rgba(237, 108, 2, 0.08)" },
+                            })
+                          }}
+                        >
+                          {p.schedulePaused ? <PlayArrow fontSize="small" /> : <Pause fontSize="small" />}
+                        </Button>
+                      </Tooltip>
+                    )}
                     {p.inputs && p.inputs.length > 0 && (
                       <Tooltip title="Configure parameters" arrow>
                         <Button
@@ -274,16 +336,36 @@ export default function Pipelines() {
                       </Button>
                     </Tooltip>
                   </>
+                ) : p.schedule ? (
+                  // Scheduled pipeline stop button - different style (warning color, pause icon)
+                  <Tooltip title="Stop scheduled pipeline run" arrow>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      startIcon={<Pause />}
+                      onClick={(e) => handleStop(e, p.id)}
+                      sx={{
+                        bgcolor: "warning.main",
+                        color: "warning.contrastText",
+                        "&:hover": { bgcolor: "warning.dark" },
+                      }}
+                    >
+                      Stop
+                    </Button>
+                  </Tooltip>
                 ) : (
-                  <Button
-                    size="small"
-                    color="error"
-                    variant="contained"
-                    startIcon={<Stop />}
-                    onClick={(e) => handleStop(e, p.id)}
-                  >
-                    Stop
-                  </Button>
+                  // Regular pipeline stop button
+                  <Tooltip title="Stop pipeline" arrow>
+                    <Button
+                      size="small"
+                      color="error"
+                      variant="contained"
+                      startIcon={<Stop />}
+                      onClick={(e) => handleStop(e, p.id)}
+                    >
+                      Stop
+                    </Button>
+                  </Tooltip>
                 )}
               </CardActions>
             </Card>

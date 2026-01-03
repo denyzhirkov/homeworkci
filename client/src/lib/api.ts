@@ -11,6 +11,7 @@ export interface Pipeline {
   description?: string;
   tags?: string[];
   schedule?: string;
+  schedulePaused?: boolean; // Pause scheduled runs
   env?: string;
   keepWorkDir?: boolean;
   inputs?: PipelineInput[];
@@ -124,6 +125,9 @@ export const runPipeline = (id: string, inputs?: Record<string, string | boolean
 
 export const stopPipeline = (id: string) => 
   api.post<{ success: boolean }>(`/pipelines/${encodeURIComponent(id)}/stop`);
+
+export const toggleSchedulePause = (id: string) => 
+  api.post<{ success: boolean; schedulePaused: boolean }>(`/pipelines/${encodeURIComponent(id)}/schedule/toggle`);
 
 // --- Run History ---
 

@@ -6,12 +6,13 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, FormControlLabel, Checkbox, Select, MenuItem, FormControl, InputLabel, TextField, Stack
 } from "@mui/material";
 import {
-  AccountTree, Extension, Timer, Storage, ArrowForward, PlayArrow, Settings
+  AccountTree, Extension, Timer, Storage, ArrowForward, PlayArrow, Settings, Stop, Pause, AccessTime
 } from "@mui/icons-material";
-import { getStats, getPipelines, runPipeline, type Pipeline, type PipelineInput } from "../lib/api";
+import { getStats, getPipelines, runPipeline, stopPipeline, toggleSchedulePause, type Pipeline, type PipelineInput } from "../lib/api";
 import { useWebSocket, type WSEvent } from "../lib/useWebSocket";
 import { LiveLogChip } from "../components/LiveLogChip";
 import { initializeInputValues } from "../lib/pipeline-inputs";
+import { getNextRunInfo } from "../lib/schedule";
 
 // Track progress for running pipelines
 interface ProgressInfo {
@@ -33,6 +34,14 @@ export default function Dashboard() {
   const [showRunModal, setShowRunModal] = useState(false);
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
   const [inputValues, setInputValues] = useState<Record<string, string | boolean>>({});
+  
+  // Schedule countdown - force re-render every 30 seconds for countdown updates
+  const [, setScheduleTick] = useState(0);
+  
+  useEffect(() => {
+    const interval = setInterval(() => setScheduleTick(t => t + 1), 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Initial load
   useEffect(() => {
@@ -105,6 +114,25 @@ export default function Dashboard() {
       await runPipeline(id, inputs);
     } catch (err) {
       console.error("Error triggering pipeline:", err);
+    }
+  };
+
+  const handleStop = async (id: string) => {
+    try {
+      await stopPipeline(id);
+    } catch (err) {
+      console.error("Error stopping pipeline:", err);
+    }
+  };
+
+  const handleToggleSchedule = async (id: string) => {
+    try {
+      const result = await toggleSchedulePause(id);
+      setPipelines(prev =>
+        prev.map(p => p.id === id ? { ...p, schedulePaused: result.schedulePaused } : p)
+      );
+    } catch (err) {
+      console.error("Error toggling schedule:", err);
     }
   };
 
@@ -193,6 +221,28 @@ export default function Dashboard() {
                       <Typography variant="subtitle1" fontWeight="medium">
                         {p.name || p.id}
                         {p.isRunning && <Chip size="small" label="Running" color="success" sx={{ ml: 1 }} />}
+                        {p.schedule && !p.isRunning && (() => {
+                          const nextInfo = !p.schedulePaused ? getNextRunInfo(p.schedule) : null;
+                          return (
+                            <Tooltip 
+                              title={p.schedulePaused 
+                                ? `Schedule paused (${p.schedule})` 
+                                : nextInfo 
+                                  ? `Next run in ${nextInfo.timeLeft} (${p.schedule})` 
+                                  : `Schedule: ${p.schedule}`
+                              } 
+                              arrow
+                            >
+                              <Chip 
+                                icon={p.schedulePaused ? <Pause sx={{ fontSize: 14 }} /> : <AccessTime sx={{ fontSize: 14 }} />}
+                                size="small" 
+                                label={p.schedulePaused ? "Paused" : (nextInfo ? `Next: ${nextInfo.timeLeft}` : p.schedule)} 
+                                color={p.schedulePaused ? "warning" : "info"}
+                                sx={{ ml: 1, fontWeight: 500, opacity: p.schedulePaused ? 0.8 : 1 }}
+                              />
+                            </Tooltip>
+                          );
+                        })()}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">{p.id}.json</Typography>
                       {/* Always reserve space to prevent layout shift */}
@@ -209,8 +259,33 @@ export default function Dashboard() {
                     </Box>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>
-                    {!p.isRunning && (
+                    {!p.isRunning ? (
                       <>
+                        {/* Schedule pause/resume button */}
+                        {p.schedule && (
+                          <Tooltip title={p.schedulePaused ? "Resume schedule" : "Pause schedule"} arrow>
+                            <Button
+                              size="small"
+                              variant={p.schedulePaused ? "contained" : "outlined"}
+                              onClick={() => handleToggleSchedule(p.id)}
+                              sx={{ 
+                                minWidth: 36, 
+                                px: 1,
+                                ...(p.schedulePaused ? {
+                                  bgcolor: "warning.main",
+                                  color: "warning.contrastText",
+                                  "&:hover": { bgcolor: "warning.dark" },
+                                } : {
+                                  borderColor: "warning.main",
+                                  color: "warning.main",
+                                  "&:hover": { borderColor: "warning.dark", bgcolor: "rgba(237, 108, 2, 0.08)" },
+                                })
+                              }}
+                            >
+                              {p.schedulePaused ? <PlayArrow fontSize="small" /> : <Pause fontSize="small" />}
+                            </Button>
+                          </Tooltip>
+                        )}
                         {p.inputs && p.inputs.length > 0 && (
                           <Tooltip title="Configure parameters" arrow>
                             <Button 
@@ -236,6 +311,36 @@ export default function Dashboard() {
                           </Button>
                         </Tooltip>
                       </>
+                    ) : p.schedule ? (
+                      // Scheduled pipeline stop button - different style (warning color, pause icon)
+                      <Tooltip title="Stop scheduled pipeline run" arrow>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          startIcon={<Pause />}
+                          onClick={() => handleStop(p.id)}
+                          sx={{
+                            bgcolor: "warning.main",
+                            color: "warning.contrastText",
+                            "&:hover": { bgcolor: "warning.dark" },
+                          }}
+                        >
+                          Stop
+                        </Button>
+                      </Tooltip>
+                    ) : (
+                      // Regular pipeline stop button
+                      <Tooltip title="Stop pipeline" arrow>
+                        <Button
+                          size="small"
+                          color="error"
+                          variant="contained"
+                          startIcon={<Stop />}
+                          onClick={() => handleStop(p.id)}
+                        >
+                          Stop
+                        </Button>
+                      </Tooltip>
                     )}
                     <Button component={Link} to={`/pipelines/${p.id}`} size="small" endIcon={<ArrowForward />}>
                       View

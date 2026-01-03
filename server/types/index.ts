@@ -8,6 +8,7 @@ export interface Pipeline {
   description?: string;
   tags?: string[]; // Tags for organizing pipelines into virtual folders
   schedule?: string;
+  schedulePaused?: boolean; // Pause scheduled runs (schedule still visible but won't trigger)
   env?: string; // Environment name to use
   keepWorkDir?: boolean; // Keep sandbox directory after run (for debugging)
   inputs?: PipelineInput[]; // Input parameters for parameterized runs
