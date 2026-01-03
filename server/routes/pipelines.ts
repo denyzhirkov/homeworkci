@@ -1,6 +1,6 @@
 // Pipeline routes - CRUD and execution endpoints
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -180,7 +180,7 @@ app.get("/:id/stats", (c) => {
 });
 
 // Sandbox cleanup
-export async function handleSandboxCleanup(c: any) {
+export async function handleSandboxCleanup(c: Context) {
   try {
     const body = await c.req.json().catch(() => ({}));
     const maxAgeMs = body.maxAgeMs ?? 24 * 60 * 60 * 1000;
