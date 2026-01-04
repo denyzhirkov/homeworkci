@@ -5,7 +5,7 @@ Minimalist self-hosted CI/CD server built with Deno and React. Define pipelines 
 ## Features
 
 - **JSON Pipelines** — Define automation workflows in simple JSON format
-- **Modular Steps** — Built-in modules: shell, docker, http, git, fs, delay, notify, archive, ssh, s3, json
+- **Modular Steps** — Built-in modules: shell, docker, http, git, fs, delay, notify, archive, ssh, s3, json, pipeline
 - **Docker Runner** — Execute steps in isolated Docker containers with resource limits
 - **Parallel Execution** — Run multiple steps simultaneously
 - **Variable Interpolation** — Access step results via `${results.stepName}` and `${prev}`
@@ -512,6 +512,40 @@ JSON manipulation operations.
 | `value` | Value for set operation |
 | `merge` | Object to merge |
 | `pretty` | Pretty print (for stringify) |
+
+### pipeline
+
+Run another pipeline as a step. This allows composing pipelines and reusing common workflows.
+
+```json
+{
+  "module": "pipeline",
+  "params": {
+    "pipelineId": "build-and-test",
+    "inputs": {
+      "version": "${results.build.version}",
+      "environment": "${inputs.env}"
+    },
+    "failOnError": true
+  }
+}
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `pipelineId` | ID of the pipeline to run (required) |
+| `inputs` | Input parameters to pass to child pipeline (optional, supports interpolation) |
+| `failOnError` | Stop parent pipeline if child fails (optional, default: `true`) |
+
+**Returns:**
+- On success: `{ "success": true, "runId": "...", "duration": 1234 }`
+- On failure with `failOnError: false`: `{ "success": false, "runId": "", "duration": 0, "error": "..." }`
+
+**Notes:**
+- Child pipeline runs in its own isolated sandbox
+- Results from child pipeline can be accessed via `${prev}` or `${results.stepName}` in subsequent steps
+- If `failOnError` is `false`, the parent pipeline continues even if the child fails
+- Child pipeline must exist and not be already running
 
 ## Smart Editor
 

@@ -1,5 +1,5 @@
 import { Box, Typography, Paper, List, ListItemButton, ListItemText, Divider, Chip } from "@mui/material";
-import { Terminal, Http, FolderCopy, Timer, Notifications, CloudQueue, Archive, Code, Lan, Storage, DataObject } from "@mui/icons-material";
+import { Terminal, Http, FolderCopy, Timer, Notifications, CloudQueue, Archive, Code, Lan, Storage, DataObject, AccountTree } from "@mui/icons-material";
 
 // Code block component
 function CodeBlock({ children }: { children: string }) {
@@ -122,6 +122,7 @@ const navItems = [
   { id: 'mod-ssh', label: 'ssh', indent: 1 },
   { id: 'mod-s3', label: 's3', indent: 1 },
   { id: 'mod-json', label: 'json', indent: 1 },
+  { id: 'mod-pipeline', label: 'pipeline', indent: 1 },
   { id: 'variables', label: 'Variables', indent: 0 },
   { id: 'editor', label: 'Smart Editor', indent: 0 },
 ];
@@ -775,7 +776,55 @@ export default function Documentation() {
 }`}
         />
 
-        <Divider sx={{ my: 4 }} />
+        <Divider sx={{ my: 4 }}         />
+
+        <ModuleDoc
+          id="mod-pipeline"
+          icon={<AccountTree fontSize="small" />}
+          title="pipeline"
+          description="Run another pipeline as a step. Allows composing pipelines and reusing common workflows. Child pipeline runs in its own isolated sandbox."
+          params={[
+            { name: 'pipelineId', type: 'string', required: true, description: 'ID of the pipeline to run' },
+            { name: 'inputs', type: 'object', description: 'Input parameters to pass to child pipeline. Supports interpolation: ${results.stepName.field}' },
+            { name: 'failOnError', type: 'boolean', description: 'Stop parent pipeline if child fails (default: true). If false, returns error in result instead of throwing' }
+          ]}
+          returns='On success: { success: true, runId: string, duration: number }. On failure with failOnError: false: { success: false, runId: "", duration: 0, error: string }'
+          example={`// Run child pipeline with inputs
+{
+  "name": "deploy",
+  "module": "pipeline",
+  "params": {
+    "pipelineId": "build-and-test",
+    "inputs": {
+      "version": "\${results.build.version}",
+      "environment": "\${inputs.env}"
+    },
+    "failOnError": true
+  }
+}
+
+// Run child pipeline and continue on error
+{
+  "name": "try-deploy",
+  "module": "pipeline",
+  "params": {
+    "pipelineId": "deploy-staging",
+    "inputs": {
+      "branch": "\${inputs.branch}"
+    },
+    "failOnError": false
+  }
+}
+
+// Access child pipeline result
+{
+  "name": "check-result",
+  "module": "shell",
+  "params": {
+    "cmd": "echo 'Child pipeline success: \${prev.success}, duration: \${prev.duration}ms'"
+  }
+}`}
+        />
 
         {/* Variables */}
         <SectionHeader id="variables" title="Variables" subtitle="Configuration management" />

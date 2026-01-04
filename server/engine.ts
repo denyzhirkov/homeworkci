@@ -189,7 +189,12 @@ function createPipelineContext(
 
 // --- Pipeline execution ---
 
-export async function runPipeline(id: string, runtimeInputs?: Record<string, string | boolean>) {
+export async function runPipeline(
+  id: string,
+  runtimeInputs?: Record<string, string | boolean>,
+  _parentPipelineId?: string,
+  _parentRunId?: string
+) {
   if (runningPipelines.has(id)) {
     throw new Error(`Pipeline ${id} is already running`);
   }
