@@ -8,14 +8,6 @@ import {
   Chip,
   Button,
   Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
 } from "@mui/material";
 import {
   DragIndicator,
@@ -29,6 +21,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { PipelineStep, ModuleInfo, ModuleSchemasMap } from "../lib/api";
 import InnerStepCard from "./InnerStepCard";
+import ModuleSelector from "./ModuleSelector";
 
 interface ParallelGroupProps {
   steps: PipelineStep[];
@@ -53,7 +46,6 @@ export default function ParallelGroup({
 }: ParallelGroupProps) {
   const [expanded, setExpanded] = useState(true);
   const [showAddStep, setShowAddStep] = useState(false);
-  const [selectedModule, setSelectedModule] = useState("");
 
   const {
     attributes,
@@ -86,16 +78,7 @@ export default function ParallelGroup({
     }
   };
 
-  const addStep = () => {
-    if (!selectedModule) return;
-    const newStep: PipelineStep = {
-      module: selectedModule,
-      params: {},
-    };
-    onChange([...steps, newStep]);
-    setShowAddStep(false);
-    setSelectedModule("");
-  };
+  // addStep is now handled directly in ModuleSelector onSelect
 
   const availableModules = modules.filter((m) => moduleSchemas[m.id]?.params);
 
@@ -204,48 +187,19 @@ export default function ParallelGroup({
       </Collapse>
 
       {/* Add Step Dialog */}
-      <Dialog
+      <ModuleSelector
         open={showAddStep}
         onClose={() => setShowAddStep(false)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>Add Parallel Step</DialogTitle>
-        <DialogContent>
-          <FormControl fullWidth sx={{ mt: 1 }}>
-            <InputLabel>Select Module</InputLabel>
-            <Select
-              value={selectedModule}
-              label="Select Module"
-              onChange={(e) => setSelectedModule(e.target.value)}
-            >
-              {availableModules.map((m) => (
-                <MenuItem key={m.id} value={m.id}>
-                  <Box>
-                    <Typography variant="body2">{m.id}</Typography>
-                    {m.description && (
-                      <Typography variant="caption" color="text.secondary">
-                        {m.description}
-                      </Typography>
-                    )}
-                  </Box>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowAddStep(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            color="warning"
-            onClick={addStep}
-            disabled={!selectedModule}
-          >
-            Add
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onSelect={(moduleId) => {
+          const newStep: PipelineStep = {
+            module: moduleId,
+            params: {},
+          };
+          onChange([...steps, newStep]);
+        }}
+        modules={availableModules}
+        title="Add Parallel Step"
+      />
     </Paper>
   );
 }

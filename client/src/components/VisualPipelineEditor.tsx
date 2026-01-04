@@ -15,13 +15,10 @@ import {
   Stack,
   Divider,
   Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Autocomplete,
 } from "@mui/material";
 import { Add, Delete, DragIndicator, FlashOn } from "@mui/icons-material";
+import ModuleSelector from "./ModuleSelector";
 import {
   DndContext,
   closestCenter,
@@ -210,8 +207,6 @@ export default function VisualPipelineEditor({
   readOnly = false,
 }: VisualPipelineEditorProps) {
   const [showAddStep, setShowAddStep] = useState(false);
-  const [selectedModule, setSelectedModule] = useState("");
-
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -237,16 +232,7 @@ export default function VisualPipelineEditor({
     updatePipeline({ steps: newSteps });
   };
 
-  const addStep = () => {
-    if (!selectedModule) return;
-    const newStep: PipelineStep = {
-      module: selectedModule,
-      params: {},
-    };
-    updatePipeline({ steps: [...pipeline.steps, newStep] });
-    setShowAddStep(false);
-    setSelectedModule("");
-  };
+  // addStep is now handled directly in ModuleSelector onSelect
 
   const addParallelGroup = () => {
     // Create a parallel group with one empty http step as placeholder
@@ -545,43 +531,19 @@ export default function VisualPipelineEditor({
       )}
 
       {/* Add Step Dialog */}
-      <Dialog open={showAddStep} onClose={() => setShowAddStep(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Add New Step</DialogTitle>
-        <DialogContent>
-          <FormControl fullWidth sx={{ mt: 1 }}>
-            <InputLabel>Select Module</InputLabel>
-            <Select
-              value={selectedModule}
-              label="Select Module"
-              onChange={(e) => setSelectedModule(e.target.value)}
-            >
-              {availableModules.map((m) => (
-                <MenuItem key={m.id} value={m.id}>
-                  <Box>
-                    <Typography variant="body2">{m.id}</Typography>
-                    {m.description && (
-                      <Typography variant="caption" color="text.secondary">
-                        {m.description}
-                      </Typography>
-                    )}
-                  </Box>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          {availableModules.length === 0 && (
-            <Typography variant="body2" color="error" sx={{ mt: 2 }}>
-              No modules with valid schemas available.
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowAddStep(false)}>Cancel</Button>
-          <Button variant="contained" onClick={addStep} disabled={!selectedModule}>
-            Add
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ModuleSelector
+        open={showAddStep}
+        onClose={() => setShowAddStep(false)}
+        onSelect={(moduleId) => {
+          const newStep: PipelineStep = {
+            module: moduleId,
+            params: {},
+          };
+          updatePipeline({ steps: [...pipeline.steps, newStep] });
+        }}
+        modules={availableModules}
+        title="Add New Step"
+      />
     </Box>
   );
 }

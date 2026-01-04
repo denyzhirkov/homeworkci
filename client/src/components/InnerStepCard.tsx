@@ -16,9 +16,11 @@ import {
   Stack,
   Tooltip,
   Autocomplete,
+  Button,
 } from "@mui/material";
 import { Delete, ExpandMore, ExpandLess } from "@mui/icons-material";
 import type { PipelineStep, ModuleInfo, ParamSchema, ModuleSchemasMap } from "../lib/api";
+import ModuleSelector from "./ModuleSelector";
 
 interface InnerStepCardProps {
   step: PipelineStep;
@@ -43,6 +45,7 @@ export default function InnerStepCard({
   readOnly = false,
 }: InnerStepCardProps) {
   const [expanded, setExpanded] = useState(true);
+  const [showModuleSelector, setShowModuleSelector] = useState(false);
 
   const schema = step.module ? moduleSchemas[step.module] : null;
   const paramSchemas = schema?.params || {};
@@ -298,26 +301,24 @@ export default function InnerStepCard({
                 disabled={readOnly}
                 sx={{ flex: 1 }}
               />
-              <FormControl
+              <Button
                 size="small"
-                sx={{ minWidth: 180 }}
+                variant="outlined"
+                onClick={() => setShowModuleSelector(true)}
                 disabled={readOnly}
+                sx={{ minWidth: 180, justifyContent: "flex-start", textTransform: "none" }}
               >
-                <InputLabel>Module *</InputLabel>
-                <Select
-                  value={step.module || ""}
-                  label="Module *"
-                  onChange={(e) =>
-                    updateStep({ module: e.target.value, params: {} })
-                  }
-                >
-                  {modules.map((m) => (
-                    <MenuItem key={m.id} value={m.id}>
-                      {m.id}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+                {step.module || "Select Module *"}
+              </Button>
+              <ModuleSelector
+                open={showModuleSelector}
+                onClose={() => setShowModuleSelector(false)}
+                onSelect={(moduleId) => {
+                  updateStep({ module: moduleId, params: {} });
+                }}
+                modules={modules}
+                title="Select Module"
+              />
             </Box>
 
             <TextField

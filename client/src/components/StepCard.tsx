@@ -16,6 +16,7 @@ import {
   Stack,
   Tooltip,
   Autocomplete,
+  Button,
 } from "@mui/material";
 import {
   DragIndicator,
@@ -26,6 +27,7 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { PipelineStep, ModuleInfo, ParamSchema, ModuleSchemasMap } from "../lib/api";
+import ModuleSelector from "./ModuleSelector";
 
 interface StepCardProps {
   step: PipelineStep;
@@ -49,6 +51,7 @@ export default function StepCard({
   readOnly = false,
 }: StepCardProps) {
   const [expanded, setExpanded] = useState(true);
+  const [showModuleSelector, setShowModuleSelector] = useState(false);
 
   const {
     attributes,
@@ -328,20 +331,24 @@ export default function StepCard({
                 disabled={readOnly}
                 sx={{ flex: 1 }}
               />
-              <FormControl size="small" sx={{ minWidth: 180 }} disabled={readOnly}>
-                <InputLabel>Module *</InputLabel>
-                <Select
-                  value={step.module || ""}
-                  label="Module *"
-                  onChange={(e) => updateStep({ module: e.target.value, params: {} })}
-                >
-                  {modules.map((m) => (
-                    <MenuItem key={m.id} value={m.id}>
-                      {m.id}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setShowModuleSelector(true)}
+                disabled={readOnly}
+                sx={{ minWidth: 180, justifyContent: "flex-start", textTransform: "none" }}
+              >
+                {step.module || "Select Module *"}
+              </Button>
+              <ModuleSelector
+                open={showModuleSelector}
+                onClose={() => setShowModuleSelector(false)}
+                onSelect={(moduleId) => {
+                  updateStep({ module: moduleId, params: {} });
+                }}
+                modules={modules}
+                title="Select Module"
+              />
             </Box>
 
             <TextField
