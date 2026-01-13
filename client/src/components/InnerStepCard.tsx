@@ -182,14 +182,36 @@ export default function InnerStepCard({
             multiline
             rows={3}
             label={`${key}${paramSchema.required ? " *" : ""} (JSON)`}
-            value={value !== undefined ? JSON.stringify(value, null, 2) : ""}
+            value={
+              value === undefined
+                ? ""
+                : typeof value === "string"
+                  ? value
+                  : JSON.stringify(value, null, 2)
+            }
             disabled={readOnly}
             onChange={(e) => {
+              const text = e.target.value;
+              if (!text.trim()) {
+                removeParam(key);
+                return;
+              }
               try {
-                const parsed = JSON.parse(e.target.value);
+                const parsed = JSON.parse(text);
                 updateParam(key, parsed);
               } catch {
-                // Keep raw value for editing
+                // Temporarily keep raw string so the user can finish typing valid JSON
+                updateParam(key, text);
+              }
+            }}
+            onBlur={(e) => {
+              const text = e.target.value;
+              if (!text.trim()) return;
+              try {
+                const parsed = JSON.parse(text);
+                updateParam(key, parsed);
+              } catch {
+                // Leave as-is; validation will surface on execution if invalid
               }
             }}
             placeholder={paramSchema.description}
@@ -425,4 +447,3 @@ export default function InnerStepCard({
     </Paper>
   );
 }
-

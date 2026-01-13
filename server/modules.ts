@@ -11,7 +11,7 @@ const MODULES_DIR = config.modulesDir;
 // Ensure modules dir exists
 await ensureDir(MODULES_DIR);
 
-const DEFAULT_MODULES = ["shell", "http", "git", "fs", "delay", "docker", "notify", "archive", "ssh", "s3", "json", "pipeline", "queue"];
+const DEFAULT_MODULES = ["shell", "http", "git", "fs", "delay", "docker", "docker_remote", "notify", "archive", "ssh", "s3", "json", "pipeline", "queue"];
 
 // Module cache with TTL to prevent memory leaks from cache busting
 interface CachedModule {

@@ -218,7 +218,10 @@ export default function Pipelines() {
                   {p.name || p.id}
                 </Typography>
                 <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap mb={1}>
-                  <Chip label={`${p.steps ? countSteps(p.steps) : 0} steps`} size="small" />
+                  <Chip
+                    label={`${p.steps ? countSteps(p.steps) : 0} ${p.steps && countSteps(p.steps) === 1 ? "step" : "steps"}`}
+                    size="small"
+                  />
                   {p.isDemo && (
                     <Chip label="Demo" size="small" color="info" />
                   )}

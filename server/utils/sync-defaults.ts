@@ -98,7 +98,7 @@ async function syncBuiltInModules(
   const targetDir = config.modulesDir;
 
   const builtInModules = [
-    "shell", "http", "git", "fs", "delay", "docker", "notify",
+    "shell", "http", "git", "fs", "delay", "docker", "docker_remote", "notify",
     "archive", "ssh", "s3", "json", "pipeline", "queue"
   ];
 

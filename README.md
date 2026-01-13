@@ -5,7 +5,7 @@ Minimalist self-hosted CI/CD server built with Deno and React. Define pipelines 
 ## Features
 
 - **JSON Pipelines** — Define automation workflows in simple JSON format
-- **Modular Steps** — Built-in modules: shell, docker, http, git, fs, delay, notify, archive, ssh, s3, json, pipeline, queue
+ - **Modular Steps** — Built-in modules: shell, docker, docker_remote, http, git, fs, delay, notify, archive, ssh, s3, json, pipeline, queue
 - **Docker Runner** — Execute steps in isolated Docker containers with resource limits
 - **Parallel Execution** — Run multiple steps simultaneously
 - **Variable Interpolation** — Access step results via `${results.stepName}` and `${prev}`
@@ -99,7 +99,7 @@ Pipelines are JSON files in the `pipelines/` directory:
 |-------|------|-------------|
 | `name` | string | Step name (used for `${results.name}`) |
 | `description` | string | Step description |
-| `module` | string | Module to execute: `shell`, `docker`, `http`, `git`, `fs`, `delay` |
+| `module` | string | Module to execute: `shell`, `docker`, `docker_remote`, `http`, `git`, `fs`, `delay` |
 | `params` | object | Module-specific parameters |
 | `dependsOn` | string \| string[] | Step names this step depends on (must succeed first) |
 
@@ -297,6 +297,47 @@ Run commands in isolated Docker containers. Requires `DOCKER_ENABLED=true`.
 | `removeImage` | `false` | Remove image after execution |
 
 **Reuse Mode:** When `reuse: true`, a persistent container is started on the first step and reused for subsequent steps. Installed packages and files persist between steps.
+
+### docker_remote
+
+Pull a Docker image on a remote host over SSH and run a container (pull + run only).
+
+```json
+{
+  "module": "docker_remote",
+  "params": {
+    "host": "1.2.3.4",
+    "user": "deploy",
+    "keyName": "prod-ssh",
+    "image": "nginx:1.27",
+    "sudo": true,
+    "name": "nginx",
+    "ports": ["80:80"],
+    "restart": "always"
+  }
+}
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `host` | Remote host address |
+| `user` | SSH username |
+| `port` | SSH port (default: 22) |
+| `keyName` | SSH key name from Variables page (recommended) |
+| `privateKey` | SSH private key content (alternative to keyName) |
+| `image` | Docker image to pull and run (e.g., nginx:1.27) |
+| `sudo` | Use sudo for docker commands (default: false) |
+| `timeout` | Operation timeout in milliseconds (default: 60000) |
+| `name` | Container name (force-removed before run if exists) |
+| `detach` | Run container in detached mode (default: true) |
+| `restart` | Restart policy: no, always, on-failure, unless-stopped |
+| `ports` | Port mappings array: `["8080:80", "443:443"]` |
+| `env` | Environment variables map → `-e KEY=VALUE` |
+| `volumes` | Volume mounts array: `["/host:/container:ro"]` |
+| `extraArgs` | Raw docker run args before image (e.g., `--add-host foo:1.2.3.4`) |
+| `cmd` | Command passed after image |
+
+Behavior: checks that Docker is present on the host, inspects previous image ID, pulls image, inspects new ID, removes old container by name if provided, and runs the new container. Returns previous/new image IDs and stdout/stderr.
 
 ### http
 

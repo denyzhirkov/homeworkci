@@ -7,8 +7,10 @@ services:
     build:
       context: .
       dockerfile: docker/server.Dockerfile
-    container_name: homeworkci-server
+    container_name: homeworkci
     restart: unless-stopped
+    ports:
+      - "${CLIENT_PORT:-80}:8008"
     environment:
       - PORT=${PORT:-8008}
       - HOST=${HOST:-0.0.0.0}
@@ -62,37 +64,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-
-  # Frontend (Nginx + React)
-  client:
-    build:
-      context: .
-      dockerfile: docker/client.Dockerfile
-      args:
-        VITE_API_BASE: /api
-    container_name: homeworkci-client
-    restart: unless-stopped
-    ports:
-      - "${CLIENT_PORT:-80}:80"
-    depends_on:
-      server:
-        condition: service_healthy
-    networks:
-      - homeworkci-network
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "http://localhost:80/",
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
 
 networks:
   homeworkci-network:

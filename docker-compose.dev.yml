@@ -6,6 +6,8 @@ services:
     build:
       context: .
       dockerfile: docker/server.Dockerfile
+    ports:
+      - "8008:8008"
     volumes:
       # Mount local directories for development
       - ./pipelines:/app/pipelines
@@ -17,8 +19,3 @@ services:
       - ./server:/app/server:ro
     environment:
       - SANDBOX_MAX_AGE_HOURS=1
-
-  client:
-    ports:
-      - "3000:80"  # Different port for dev
-

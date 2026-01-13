@@ -1,10 +1,26 @@
 # HomeworkCI Server Dockerfile
-# Deno runtime with all server dependencies
+# Deno runtime with bundled frontend build
 
+# === Frontend Build Stage ===
+FROM node:20-slim AS client-build
+
+WORKDIR /app/client
+
+# Install dependencies
+COPY client/package*.json ./
+RUN npm ci
+
+# Build frontend
+COPY client/ ./
+ARG VITE_API_BASE=/api
+ENV VITE_API_BASE=$VITE_API_BASE
+RUN npm run build
+
+# === Server Stage ===
 FROM denoland/deno:2.6.3
 
 LABEL maintainer="HomeworkCI"
-LABEL description="HomeworkCI Pipeline Server"
+LABEL description="HomeworkCI Pipeline Server (with frontend)"
 
 WORKDIR /app
 
@@ -59,6 +75,9 @@ COPY config/ ./defaults/config/
 # Also copy to actual locations (for non-volume usage)
 COPY modules/ ./modules/
 COPY pipelines/ ./pipelines/
+
+# Copy built frontend
+COPY --from=client-build /app/client/dist ./client/dist/
 
 # Copy entrypoint script
 COPY docker/entrypoint.sh /entrypoint.sh
