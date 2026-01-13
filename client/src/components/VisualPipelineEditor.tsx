@@ -96,7 +96,7 @@ function SortableInputItem({
           size="small"
           label="Name"
           value={input.name}
-          onChange={(e) => onChange({ ...input, name: e.target.value })}
+          onChange={(e) => onChange({ ...input, name: e.target.value.replace(/\s+/g, "") })}
           disabled={readOnly}
           sx={{ width: 120 }}
         />
@@ -547,4 +547,3 @@ export default function VisualPipelineEditor({
     </Box>
   );
 }
-

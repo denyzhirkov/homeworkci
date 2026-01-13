@@ -1,9 +1,4 @@
 {
   "global": {},
-  "environments": {
-    "dev": {
-      "VAR_1": "123",
-      "VAR_2": "12345"
-    }
-  }
+  "environments": {}
 }
