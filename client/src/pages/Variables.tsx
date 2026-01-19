@@ -297,14 +297,25 @@ export default function Variables() {
         </Button>
       </Box>
 
-      {/* Autosave progress bar */}
-      {saveProgress > 0 && saveProgress < 100 && (
-        <Box sx={{ mb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+      <Paper sx={{ mb: 3, p: 0, position: 'relative' }}>
+        {/* Autosave progress bar - absolute positioned to not shift layout */}
+        <Box 
+          sx={{ 
+            position: 'absolute', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            zIndex: 1,
+            opacity: saveProgress > 0 && saveProgress < 100 ? 1 : 0,
+            transition: 'opacity 0.2s',
+            pointerEvents: saveProgress > 0 && saveProgress < 100 ? 'auto' : 'none',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 0.5, bgcolor: 'background.paper' }}>
             <Typography variant="caption" color="text.secondary">
               Auto-saving in {Math.ceil((100 - saveProgress) / 50)}s...
             </Typography>
-            <Button size="small" onClick={cancelAutosave} sx={{ minWidth: 'auto', p: 0.5 }}>
+            <Button size="small" onClick={cancelAutosave} sx={{ minWidth: 'auto', p: 0.5, fontSize: '0.7rem' }}>
               Cancel
             </Button>
           </Box>
@@ -312,18 +323,13 @@ export default function Variables() {
             variant="determinate" 
             value={saveProgress} 
             sx={{ 
-              height: 4, 
-              borderRadius: 2,
-              bgcolor: 'action.hover',
+              height: 3,
               '& .MuiLinearProgress-bar': {
-                borderRadius: 2,
+                transition: 'transform 0.1s linear',
               }
             }} 
           />
         </Box>
-      )}
-
-      <Paper sx={{ mb: 3, p: 0 }}>
         <Tabs
           value={activeTab}
           onChange={(_, val) => setActiveTab(val)}
