@@ -5,7 +5,7 @@ Minimalist self-hosted CI/CD server built with Deno and React. Define pipelines 
 ## Features
 
 - **JSON Pipelines** — Define automation workflows in simple JSON format
- - **Modular Steps** — Built-in modules: shell, docker, docker_remote, http, git, fs, delay, notify, archive, ssh, s3, json, pipeline, queue, crypto
+ - **Modular Steps** — Built-in modules: shell, docker, docker_remote, http, git, fs, delay, wait, notify, archive, ssh, s3, json, pipeline, queue, crypto
 - **Docker Runner** — Execute steps in isolated Docker containers with resource limits
 - **Parallel Execution** — Run multiple steps simultaneously
 - **Variable Interpolation** — Access step results via `${results.stepName}` and `${prev}`
@@ -99,7 +99,7 @@ Pipelines are JSON files in the `pipelines/` directory:
 |-------|------|-------------|
 | `name` | string | Step name (used for `${results.name}`) |
 | `description` | string | Step description |
-| `module` | string | Module to execute: `shell`, `docker`, `docker_remote`, `http`, `git`, `fs`, `delay`, `crypto` |
+| `module` | string | Module to execute: `shell`, `docker`, `docker_remote`, `http`, `git`, `fs`, `delay`, `wait`, `crypto` |
 | `params` | object | Module-specific parameters |
 | `dependsOn` | string \| string[] | Step names this step depends on (must succeed first) |
 
@@ -514,6 +514,59 @@ Wait for a specified time.
   }
 }
 ```
+
+### wait
+
+Wait for conditions to be met: HTTP endpoint availability, file existence, or process completion. Uses polling with configurable intervals and timeouts.
+
+```json
+{
+  "module": "wait",
+  "params": {
+    "op": "http",
+    "url": "https://api.example.com/health",
+    "timeout": 30000,
+    "interval": 1000
+  }
+}
+```
+
+```json
+{
+  "module": "wait",
+  "params": {
+    "op": "file",
+    "path": "./output.txt",
+    "timeout": 60000
+  }
+}
+```
+
+```json
+{
+  "module": "wait",
+  "params": {
+    "op": "process",
+    "pid": 12345,
+    "timeout": 30000
+  }
+}
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `op` | Operation type: `http` (wait for HTTP endpoint), `file` (wait for file to exist), `process` (wait for process to finish) |
+| `url` | HTTP endpoint URL (required for `http` operation) |
+| `method` | HTTP method (for `http`, default: `GET`) |
+| `expectedStatus` | Expected HTTP status code (for `http`, default: `200`) |
+| `headers` | Custom HTTP headers (for `http`) |
+| `path` | File path to wait for (required for `file` operation) |
+| `pid` | Process ID to wait for (required for `process` operation) |
+| `timeout` | Maximum wait time in milliseconds (default: `60000`) |
+| `interval` | Polling interval in milliseconds (default: `1000`, minimum: `100`) |
+| `retries` | Maximum number of attempts (alternative to timeout, if set, timeout is ignored) |
+
+**Returns:** `{ "success": true, "waited": <ms>, "attempts": <number>, "operation": <string> }`
 
 ### notify
 
