@@ -192,7 +192,7 @@ async function pollUntil(
       // Wait for interval, but respect abort signal
       await new Promise<void>((resolve, reject) => {
         const timeoutId = setTimeout(resolve, actualInterval);
-        
+
         if (signal) {
           signal.addEventListener("abort", () => {
             clearTimeout(timeoutId);

@@ -37,15 +37,15 @@ function SectionHeader({ id, title, subtitle }: { id: string; title: string; sub
 }
 
 // Module documentation component
-function ModuleDoc({ 
-  id, 
-  icon, 
-  title, 
-  description, 
-  params, 
-  returns, 
-  example 
-}: { 
+function ModuleDoc({
+  id,
+  icon,
+  title,
+  description,
+  params,
+  returns,
+  example
+}: {
   id: string;
   icon: React.ReactNode;
   title: string;
@@ -57,12 +57,12 @@ function ModuleDoc({
   return (
     <Box id={id} sx={{ mb: 4, scrollMarginTop: 80 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        <Box sx={{ 
-          p: 0.75, 
-          borderRadius: 1, 
-          bgcolor: 'primary.dark', 
-          display: 'flex', 
-          alignItems: 'center' 
+        <Box sx={{
+          p: 0.75,
+          borderRadius: 1,
+          bgcolor: 'primary.dark',
+          display: 'flex',
+          alignItems: 'center'
         }}>
           {icon}
         </Box>
@@ -71,7 +71,7 @@ function ModuleDoc({
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         {description}
       </Typography>
-      
+
       <Typography variant="subtitle2" sx={{ mb: 1 }}>Parameters</Typography>
       <Paper sx={{ p: 1.5, mb: 2, bgcolor: 'background.default' }}>
         {params.map((p, i) => (
@@ -89,12 +89,12 @@ function ModuleDoc({
           </Box>
         ))}
       </Paper>
-      
+
       <Typography variant="subtitle2" sx={{ mb: 1 }}>Returns</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2, pl: 1 }}>
         {returns}
       </Typography>
-      
+
       <Typography variant="subtitle2" sx={{ mb: 1 }}>Example</Typography>
       <CodeBlock>{example}</CodeBlock>
     </Box>
@@ -159,15 +159,15 @@ export default function Documentation() {
             <ListItemButton
               key={item.id}
               onClick={() => scrollTo(item.id)}
-              sx={{ 
+              sx={{
                 pl: 2 + item.indent * 2,
                 py: 0.5,
                 '&:hover': { bgcolor: 'action.hover' }
               }}
             >
-              <ListItemText 
-                primary={item.label} 
-                primaryTypographyProps={{ 
+              <ListItemText
+                primary={item.label}
+                primaryTypographyProps={{
                   variant: item.indent === 0 ? 'body2' : 'caption',
                   fontWeight: item.indent === 0 ? 500 : 400,
                   color: item.indent === 0 ? 'text.primary' : 'text.secondary',
@@ -193,7 +193,7 @@ export default function Documentation() {
         {/* Overview */}
         <SectionHeader id="overview" title="Overview" subtitle="What is HomeworkCI" />
         <Typography variant="body2" paragraph>
-          HomeworkCI is a lightweight automation platform built with Deno and React. It allows you to define 
+          HomeworkCI is a lightweight automation platform built with Deno and React. It allows you to define
           automation workflows (pipelines) using JSON configuration and execute them with built-in or custom modules.
         </Typography>
         <Typography variant="body2" paragraph>
@@ -211,7 +211,7 @@ export default function Documentation() {
         {/* Pipelines */}
         <SectionHeader id="pipelines" title="Pipelines" subtitle="Automation workflows" />
         <Typography variant="body2" paragraph>
-          Pipelines are defined as JSON files in the <code>pipelines/</code> directory. Each pipeline has a name, 
+          Pipelines are defined as JSON files in the <code>pipelines/</code> directory. Each pipeline has a name,
           optional description, and a list of steps to execute.
         </Typography>
 
@@ -262,14 +262,14 @@ export default function Documentation() {
       },
       {
         "name": "api2",
-        "module": "http", 
+        "module": "http",
         "params": { "url": "https://api.example.com/posts" }
       }
     ]
   ]
 }`}</CodeBlock>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          Steps inside a nested array execute simultaneously. The pipeline waits for all 
+          Steps inside a nested array execute simultaneously. The pipeline waits for all
           parallel steps to complete before continuing to the next step.
         </Typography>
 
@@ -284,16 +284,16 @@ export default function Documentation() {
   "steps": [
     { "name": "build", "module": "shell", "params": { "cmd": "npm run build" } },
     { "name": "test", "module": "shell", "params": { "cmd": "npm test" } },
-    { 
-      "name": "deploy", 
-      "module": "shell", 
+    {
+      "name": "deploy",
+      "module": "shell",
       "params": { "cmd": "deploy.sh" },
       "dependsOn": ["build", "test"]
     }
   ]
 }`}</CodeBlock>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          If any dependency fails, the pipeline stops with an error. Dependencies must reference 
+          If any dependency fails, the pipeline stops with an error. Dependencies must reference
           steps defined before the current step.
         </Typography>
 
@@ -301,7 +301,7 @@ export default function Documentation() {
           Inputs
         </Typography>
         <Typography variant="body2" paragraph>
-          Inputs allow you to parameterize pipelines. When running a pipeline with inputs, a form is displayed 
+          Inputs allow you to parameterize pipelines. When running a pipeline with inputs, a form is displayed
           to enter values.
         </Typography>
         <CodeBlock>{`{
@@ -328,7 +328,7 @@ export default function Documentation() {
   ]
 }`}</CodeBlock>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          Input types: <code>string</code>, <code>boolean</code>, <code>select</code>. 
+          Input types: <code>string</code>, <code>boolean</code>, <code>select</code>.
           Access inputs in steps via <code>{"${inputs.name}"}</code>.
         </Typography>
 
@@ -336,7 +336,7 @@ export default function Documentation() {
           Dynamic Environment
         </Typography>
         <Typography variant="body2" paragraph>
-          The <code>env</code> field supports interpolation, allowing you to select the environment at runtime 
+          The <code>env</code> field supports interpolation, allowing you to select the environment at runtime
           based on input parameters. This is useful for pipelines that need to run against different environments.
         </Typography>
         <CodeBlock>{`{
@@ -361,7 +361,7 @@ export default function Documentation() {
   ]
 }`}</CodeBlock>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          When the pipeline runs, the user selects an environment, and variables from that environment 
+          When the pipeline runs, the user selects an environment, and variables from that environment
           are loaded automatically. The environment chip in the header will animate to show it's dynamic.
         </Typography>
 
@@ -402,7 +402,7 @@ export default function Documentation() {
 // Access working directory
 { "output": "\${WORK_DIR}/artifacts/\${BUILD_ID}.zip" }`}</CodeBlock>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          Available interpolation variables: <code>{"${prev}"}</code>, <code>{"${results.stepName}"}</code>, 
+          Available interpolation variables: <code>{"${prev}"}</code>, <code>{"${results.stepName}"}</code>,
           <code>{"${env.VAR_NAME}"}</code>, <code>{"${inputs.inputName}"}</code>, <code>{"${pipelineId}"}</code>,
           <code>{"${BUILD_ID}"}</code>, <code>{"${UNIXTIMESTAMP}"}</code>, <code>{"${WORK_DIR}"}</code>,
           <code>{"${DATE}"}</code>, <code>{"${TIME}"}</code>, <code>{"${DATETIME}"}</code>, <code>{"${YEAR}"}</code>,
@@ -414,7 +414,7 @@ export default function Documentation() {
         {/* Modules */}
         <SectionHeader id="modules" title="Modules" subtitle="Built-in functionality" />
         <Typography variant="body2" paragraph>
-          Modules are TypeScript functions that perform specific actions. HomeworkCI includes 12 built-in modules. 
+          Modules are TypeScript functions that perform specific actions. HomeworkCI includes 12 built-in modules.
           You can also create custom modules by adding <code>.ts</code> files to the <code>modules/</code> directory.
         </Typography>
 
@@ -1184,14 +1184,14 @@ export default function Documentation() {
         {/* Variables */}
         <SectionHeader id="variables" title="Variables" subtitle="Configuration management" />
         <Typography variant="body2" paragraph>
-          Variables allow you to store configuration values that can be used across pipelines. 
+          Variables allow you to store configuration values that can be used across pipelines.
           All variables are accessed via <code>{"${env.VARIABLE_NAME}"}</code> in step parameters.
           There are two types of variables:
         </Typography>
-        
+
         <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Global Variables</Typography>
         <Typography variant="body2" paragraph>
-          Available in <strong>all pipelines</strong> regardless of environment. Use for values that don't change 
+          Available in <strong>all pipelines</strong> regardless of environment. Use for values that don't change
           between environments (API base URLs, notification settings, common paths, etc.).
         </Typography>
         <CodeBlock>{`// Example: Global variables in config/variables.json
@@ -1224,10 +1224,10 @@ export default function Documentation() {
     }
   ]
 }`}</CodeBlock>
-        
+
         <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>Environment Variables</Typography>
         <Typography variant="body2" paragraph>
-          Defined per environment (e.g., "production", "staging", "dev"). When a pipeline specifies an environment 
+          Defined per environment (e.g., "production", "staging", "dev"). When a pipeline specifies an environment
           via the <code>env</code> field, those variables are <strong>merged</strong> with global variables.
           Environment-specific values override global values with the same name.
         </Typography>
@@ -1266,7 +1266,7 @@ export default function Documentation() {
 
         <Typography id="variables-ssh-keys" variant="h6" sx={{ mt: 3, mb: 1, scrollMarginTop: 80 }}>SSH Keys</Typography>
         <Typography variant="body2" paragraph>
-          SSH keys allow secure authentication to remote servers without storing private keys in pipeline configurations. 
+          SSH keys allow secure authentication to remote servers without storing private keys in pipeline configurations.
           Generate SSH keys on the <strong>Variables</strong> page and reference them by name in SSH module steps.
         </Typography>
         <Typography variant="body2" paragraph>
@@ -1293,7 +1293,7 @@ export default function Documentation() {
 // SSH keys are stored securely in config/variables.json
 // Private keys are never exposed in pipeline configurations`}</CodeBlock>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          SSH keys are generated as Ed25519 key pairs without passphrases, optimized for automation. 
+          SSH keys are generated as Ed25519 key pairs without passphrases, optimized for automation.
           Each key has a unique name that you can reference in your pipelines.
         </Typography>
 
@@ -1306,7 +1306,7 @@ export default function Documentation() {
           <li><Typography variant="body2"><strong>Global variables</strong> — From <code>config/variables.json</code></Typography></li>
           <li><Typography variant="body2"><strong>Environment variables</strong> — From selected environment</Typography></li>
         </Box>
-        
+
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
           Manage variables on the <strong>Variables</strong> page. Changes take effect immediately for new pipeline runs.
         </Typography>
@@ -1316,19 +1316,19 @@ export default function Documentation() {
         {/* Smart Editor */}
         <SectionHeader id="editor" title="Smart Editor" subtitle="Intelligent autocomplete" />
         <Typography variant="body2" paragraph>
-          The pipeline editor includes intelligent autocomplete powered by Monaco Editor (the same editor used in VS Code). 
+          The pipeline editor includes intelligent autocomplete powered by Monaco Editor (the same editor used in VS Code).
           It provides context-aware suggestions as you type.
         </Typography>
-        
+
         <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Module Suggestions</Typography>
         <Typography variant="body2" paragraph>
-          When typing <code>"module": "</code>, the editor suggests all available modules with descriptions. 
+          When typing <code>"module": "</code>, the editor suggests all available modules with descriptions.
           Built-in modules are prioritized, and custom modules are also included.
         </Typography>
-        
+
         <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Parameter Hints</Typography>
         <Typography variant="body2" paragraph>
-          Inside <code>"params": {"{}"}</code>, the editor suggests parameters specific to the selected module. 
+          Inside <code>"params": {"{}"}</code>, the editor suggests parameters specific to the selected module.
           Each parameter shows:
         </Typography>
         <Box component="ul" sx={{ pl: 3, '& li': { mb: 0.5 } }}>
@@ -1337,7 +1337,7 @@ export default function Documentation() {
           <li><Typography variant="body2"><strong>Enum values</strong> — For parameters with predefined options (e.g., <code>op: "zip" | "unzip"</code>)</Typography></li>
           <li><Typography variant="body2"><strong>Type information</strong> — string, number, boolean, object</Typography></li>
         </Box>
-        
+
         <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Variable Autocomplete</Typography>
         <Typography variant="body2" paragraph>
           When typing <code>{"${"}</code> inside a string value, the editor suggests available interpolation variables:
@@ -1349,10 +1349,10 @@ export default function Documentation() {
           <li><Typography variant="body2"><code>{"${env.VAR_NAME}"}</code> — Environment variables (with suggestions from your configured variables)</Typography></li>
           <li><Typography variant="body2"><code>{"${pipelineId}"}</code> — Current pipeline ID</Typography></li>
         </Box>
-        
+
         <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Quick Insert Panel</Typography>
         <Typography variant="body2" paragraph>
-          Above the editor, a Quick Insert panel provides one-click buttons for common variables. 
+          Above the editor, a Quick Insert panel provides one-click buttons for common variables.
           Click any variable chip to insert it at the cursor position.
         </Typography>
       </Box>
