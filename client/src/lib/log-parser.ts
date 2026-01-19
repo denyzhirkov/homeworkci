@@ -6,7 +6,7 @@ export interface LogBlock {
   id: string;
   title: string;
   lines: string[];
-  status: "running" | "success" | "error" | "info" | "parallel";
+  status: "running" | "success" | "error" | "info" | "parallel" | "skipped";
   duration?: number; // milliseconds
   parallelGroup?: string; // group name for parallel steps
   children?: LogBlock[]; // nested blocks for parallel groups
@@ -18,7 +18,8 @@ export const statusColors: Record<LogBlock["status"], string> = {
   error: "#b71c1c",
   running: "#e65100",
   info: "#0d47a1",
-  parallel: "#4a148c"
+  parallel: "#4a148c",
+  skipped: "#424242"
 };
 
 // Border colors for log blocks
@@ -27,7 +28,8 @@ export const borderColors: Record<LogBlock["status"], string> = {
   error: "#f44336",
   running: "#ff9800",
   info: "#2196f3",
-  parallel: "#9c27b0"
+  parallel: "#9c27b0",
+  skipped: "#9e9e9e"
 };
 
 /**
@@ -81,8 +83,8 @@ export function parseLogBlocks(content: string): LogBlock[] {
 
   // First pass: create blocks
   for (const line of lines) {
-    // Check for parallel group marker: "Running N steps in parallel"
-    const parallelMatch = line.match(/Running (\d+) steps in parallel/);
+    // Check for parallel group marker: "Parallel Group (N steps)" or old format "Running N steps in parallel"
+    const parallelMatch = line.match(/Parallel Group \((\d+) steps\)/) || line.match(/Running (\d+) steps in parallel/);
     if (parallelMatch) {
       const count = parseInt(parallelMatch[1], 10);
       parallelGroupCounter++;
@@ -93,10 +95,14 @@ export function parseLogBlocks(content: string): LogBlock[] {
       };
     }
 
-    // Check for step start marker: "Running step: ..."
-    const stepStartMatch = line.match(/\[.*?\] Running step: (.+)$/);
+    // Check for step start marker: "Running step: ..." or "SKIPPED: ..."
+    // Use simple patterns without emoji (emoji encoding varies)
+    const stepStartMatch = line.match(/Running step: (.+)$/);
+    const skipMatch = line.match(/SKIPPED: (.+?) \(condition:/);
     
-    if (stepStartMatch) {
+    if (stepStartMatch || skipMatch) {
+      const isSkipped = !!skipMatch;
+      const stepName = isSkipped ? skipMatch![1] : stepStartMatch![1];
       // Save previous block with duration
       if (currentBlock) {
         currentBlock.duration = calculateDuration(currentBlock.lines);
@@ -132,9 +138,9 @@ export function parseLogBlocks(content: string): LogBlock[] {
       // Start new step block
       currentBlock = {
         id: `step-${blockId++}`,
-        title: stepStartMatch[1],
+        title: stepName,
         lines: [line],
-        status: "running",
+        status: isSkipped ? "skipped" : "running",
         parallelGroup
       };
     } else if (currentBlock) {
@@ -173,7 +179,7 @@ export function parseLogBlocks(content: string): LogBlock[] {
     if (completedMatch) {
       const stepTitle = completedMatch[1];
       const block = blocksByTitle.get(stepTitle);
-      if (block && block.status !== "error") {
+      if (block && block.status !== "error" && block.status !== "skipped") {
         block.status = "success";
         // Update duration with the completion timestamp
         const completionTs = parseTimestamp(line);
@@ -197,7 +203,7 @@ export function parseLogBlocks(content: string): LogBlock[] {
       parallelIndex++;
       // Create a parallel group container
       const children = rawBlocks.slice(i, i + groupInfo.count);
-      const allSuccess = children.every(b => b.status === "success");
+      const allCompleted = children.every(b => b.status === "success" || b.status === "skipped");
       const hasError = children.some(b => b.status === "error");
       const maxDuration = Math.max(...children.map(b => b.duration || 0));
       
@@ -205,7 +211,7 @@ export function parseLogBlocks(content: string): LogBlock[] {
         id: `parallel-${blockId++}`,
         title: `Parallel Group ${parallelIndex} (${groupInfo.count} steps)`,
         lines: [],
-        status: hasError ? "error" : allSuccess ? "success" : "running",
+        status: hasError ? "error" : allCompleted ? "success" : "running",
         duration: maxDuration > 0 ? maxDuration : undefined,
         children
       });

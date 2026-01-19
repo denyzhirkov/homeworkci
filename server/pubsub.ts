@@ -1,10 +1,13 @@
 // Pipeline-specific events
 export type PipelineEvent = 
-  | { type: "log"; pipelineId: string; payload: { runId: string; msg: string; ts: string } }
+  | { type: "log"; pipelineId: string; payload: { runId: string; msg: string; ts: string; stepName?: string } }
   | { type: "start"; pipelineId: string; payload: { runId: string; totalSteps: number } }
   | { type: "end"; pipelineId: string; payload: { runId: string; success: boolean } }
   | { type: "step-start"; pipelineId: string; payload: { runId: string; step: string; stepIndex: number; totalSteps: number } }
-  | { type: "step-end"; pipelineId: string; payload: { runId: string; step: string; stepIndex: number; totalSteps: number; success: boolean; error?: string } };
+  | { type: "step-end"; pipelineId: string; payload: { runId: string; step: string; stepIndex: number; totalSteps: number; success: boolean; error?: string; skipped?: boolean } }
+  | { type: "step-skipped"; pipelineId: string; payload: { runId: string; step: string; stepIndex: number; totalSteps: number } }
+  | { type: "parallel-start"; pipelineId: string; payload: { runId: string; count: number } }
+  | { type: "parallel-end"; pipelineId: string; payload: { runId: string; executed: string[]; skipped: string[] } };
 
 // System-wide events
 export type SystemEvent =

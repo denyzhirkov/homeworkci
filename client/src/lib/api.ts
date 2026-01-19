@@ -20,12 +20,19 @@ export interface Pipeline {
   isDemo?: boolean;
 }
 
+export interface SkipCondition {
+  variable: string; // Path to variable: "inputs.skipBuild", "env.SKIP_TEST", "results.prevStep.skip"
+  equals?: string | number | boolean; // Value to compare (equals)
+  notEquals?: string | number | boolean; // Value to compare (not equals)
+}
+
 export interface PipelineStep {
   name?: string;
   description?: string;
   module: string;
   params?: Record<string, unknown>;
   dependsOn?: string | string[]; // Step names this step depends on (must succeed first)
+  skipWhen?: SkipCondition; // Condition to skip this step
 }
 
 // A step item can be a single step or an array of parallel steps

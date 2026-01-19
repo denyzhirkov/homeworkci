@@ -1,5 +1,5 @@
 import { Box, Typography, Chip, Collapse } from "@mui/material";
-import { CheckCircle, Error, HourglassEmpty, ExpandMore, ExpandLess, CallSplit } from "@mui/icons-material";
+import { CheckCircle, Error, HourglassEmpty, ExpandMore, ExpandLess, CallSplit, SkipNext } from "@mui/icons-material";
 import { useState, useMemo } from "react";
 import { 
   parseLogBlocks, 
@@ -8,9 +8,11 @@ import {
   borderColors, 
   type LogBlock 
 } from "../lib/log-parser";
+import type { LiveLogBlock } from "../lib/useWebSocket";
 
 interface LogViewerProps {
-  content: string;
+  content?: string;
+  liveBlocks?: LiveLogBlock[];
   isLive?: boolean;
 }
 
@@ -22,6 +24,8 @@ function StatusIcon({ status }: { status: LogBlock["status"] }) {
       return <Error sx={{ fontSize: 16, color: "#f44336" }} />;
     case "running":
       return <HourglassEmpty sx={{ fontSize: 16, color: "#ff9800" }} />;
+    case "skipped":
+      return <SkipNext sx={{ fontSize: 16, color: "#9e9e9e" }} />;
     default:
       return null;
   }
@@ -143,10 +147,32 @@ function LogBlockComponent({ block, defaultExpanded = true, nested = false }: {
   );
 }
 
-export default function LogViewer({ content, isLive = false }: LogViewerProps) {
-  const blocks = useMemo(() => parseLogBlocks(content), [content]);
+// Convert LiveLogBlock to LogBlock format
+function convertLiveBlocks(liveBlocks: LiveLogBlock[]): LogBlock[] {
+  return liveBlocks.map((lb): LogBlock => ({
+    id: lb.id,
+    title: lb.title,
+    lines: lb.lines,
+    status: lb.type === "parallel" ? "parallel" : 
+            lb.type === "info" ? "info" : 
+            lb.status,
+    duration: lb.startTime && lb.endTime ? lb.endTime - lb.startTime : undefined,
+    children: lb.children ? convertLiveBlocks(lb.children) : undefined
+  }));
+}
 
-  if (!content || content.trim() === "") {
+export default function LogViewer({ content, liveBlocks, isLive = false }: LogViewerProps) {
+  // Use liveBlocks if provided, otherwise parse from content
+  const blocks = useMemo(() => {
+    if (liveBlocks && liveBlocks.length > 0) {
+      return convertLiveBlocks(liveBlocks);
+    }
+    return content ? parseLogBlocks(content) : [];
+  }, [content, liveBlocks]);
+
+  const isEmpty = !liveBlocks?.length && (!content || content.trim() === "");
+
+  if (isEmpty) {
     return (
       <Typography color="gray" sx={{ p: 2, textAlign: "center" }}>
         {isLive ? "Waiting for logs..." : "No logs available"}
@@ -155,9 +181,9 @@ export default function LogViewer({ content, isLive = false }: LogViewerProps) {
   }
 
   // If no blocks parsed (simple log), show as plain text
-  if (blocks.length === 0) {
+  if (blocks.length === 0 && content) {
     return (
-      <pre style={{ margin: 0, whiteSpace: "pre-wrap", color: "#b0b0b0" }}>
+      <pre style={{ margin: 0, whiteSpace: "pre-wrap", color: "#b0b0b0", padding: 16 }}>
         {content}
       </pre>
     );

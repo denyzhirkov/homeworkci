@@ -23,7 +23,7 @@ export const schema = {
 };
 
 export async function run(ctx: PipelineContext, params: { ms: number }): Promise<{ waited: number }> {
-  console.log(`[Delay] Sleeping for ${params.ms}ms...`);
+  if (ctx.log) ctx.log(`[Delay] Sleeping for ${params.ms}ms...`);
   
   // Support cancellation via AbortSignal
   if (ctx.signal) {

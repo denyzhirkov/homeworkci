@@ -66,9 +66,10 @@ export function endStep(
   stepId: number,
   success: boolean,
   result?: unknown,
-  error?: string
+  error?: string,
+  skipped?: boolean
 ): void {
-  const status = success ? "success" : "fail";
+  const status = skipped ? "skipped" : (success ? "success" : "fail");
   const resultJson = result !== undefined ? JSON.stringify(result) : undefined;
   finishStep(stepId, status, resultJson, error);
 }

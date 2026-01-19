@@ -14,7 +14,7 @@ import { Add, LocalOffer, Code, ViewModule } from "@mui/icons-material";
 import Editor, { type Monaco } from "@monaco-editor/react";
 import { getPipeline, savePipeline, runPipeline, stopPipeline, toggleSchedulePause, type Pipeline, type PipelineInput, getRunHistory, getRunLog, deletePipeline, createPipeline, getVariables, type VariablesConfig, getModules, getModuleSchemas, type ModuleInfo, type ModuleSchemasMap } from "../lib/api";
 import type { editor } from "monaco-editor";
-import { useWebSocket, type WSEvent } from "../lib/useWebSocket";
+import { useWebSocket, type WSEvent, type LiveLogBlock } from "../lib/useWebSocket";
 import LogViewer from "../components/LogViewer";
 import VisualPipelineEditor from "../components/VisualPipelineEditor";
 import { initializeInputValues } from "../lib/pipeline-inputs";
@@ -57,8 +57,13 @@ export default function PipelineDetail() {
 
   // Live Logs State
   const [liveLogs, setLiveLogs] = useState("");
+  const [liveBlocks, setLiveBlocks] = useState<LiveLogBlock[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const logContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Track parallel group for live blocks
+  const parallelGroupRef = useRef<{ id: string; count: number; children: LiveLogBlock[] } | null>(null);
+  const blockIdRef = useRef(0);
 
   // Variables for quick insert
   const [variables, setVariables] = useState<VariablesConfig>({ global: {}, environments: {} });
@@ -184,26 +189,191 @@ export default function PipelineDetail() {
     if (!("pipelineId" in event) || event.pipelineId !== id) return;
 
     switch (event.type) {
-      case "log":
-        setLiveLogs(prev => prev + `[${event.payload.ts}] ${event.payload.msg}\n`);
-        break;
       case "start":
         setLiveLogs(`Pipeline started: ${event.payload.runId}\n`);
+        setLiveBlocks([]);
         setSelectedRun("live");
         setIsRunning(true);
+        blockIdRef.current = 0;
+        parallelGroupRef.current = null;
         break;
+        
+      case "log":
+        // Append to raw logs
+        setLiveLogs(prev => prev + `[${event.payload.ts}] ${event.payload.msg}\n`);
+        
+        // Add to structured blocks
+        const { stepName, msg, ts } = event.payload;
+        const logLine = `[${ts}] ${msg}`;
+        
+        if (stepName) {
+          // First check if step is in current parallel group (not yet in liveBlocks)
+          if (parallelGroupRef.current) {
+            const child = parallelGroupRef.current.children.find(c => c.title === stepName);
+            if (child) {
+              child.lines.push(logLine);
+              break;
+            }
+          }
+          
+          // Otherwise find in liveBlocks
+          setLiveBlocks(prev => {
+            const updated = [...prev];
+            for (let i = updated.length - 1; i >= 0; i--) {
+              const block = updated[i];
+              if (block.type === "step" && block.title === stepName) {
+                block.lines = [...block.lines, logLine];
+                return [...updated];
+              }
+              if (block.type === "parallel" && block.children) {
+                const child = block.children.find(c => c.title === stepName);
+                if (child) {
+                  child.lines = [...child.lines, logLine];
+                  return [...updated];
+                }
+              }
+            }
+            return prev;
+          });
+        } else {
+          // Info log (no stepName - pipeline level) - add to first info block
+          setLiveBlocks(prev => {
+            // Find the first info block (always add pipeline-level logs there)
+            const infoIndex = prev.findIndex(b => b.type === "info");
+            if (infoIndex >= 0) {
+              const updated = [...prev];
+              updated[infoIndex] = { 
+                ...updated[infoIndex], 
+                lines: [...updated[infoIndex].lines, logLine] 
+              };
+              return updated;
+            }
+            // Create first info block if none exists
+            return [{
+              id: `info-${blockIdRef.current++}`,
+              type: "info",
+              title: "Pipeline Info",
+              status: "running",
+              lines: [logLine]
+            }, ...prev];
+          });
+        }
+        break;
+        
+      case "parallel-start":
+        parallelGroupRef.current = {
+          id: `parallel-${blockIdRef.current++}`,
+          count: event.payload.count,
+          children: []
+        };
+        break;
+        
+      case "step-start":
+        {
+          const newStep: LiveLogBlock = {
+            id: `step-${blockIdRef.current++}`,
+            type: "step",
+            title: event.payload.step,
+            status: "running",
+            lines: [],
+            startTime: Date.now()
+          };
+          
+          if (parallelGroupRef.current) {
+            parallelGroupRef.current.children.push(newStep);
+          } else {
+            setLiveBlocks(prev => {
+              const updated = prev.map(b => 
+                b.type === "info" && b.status === "running" 
+                  ? { ...b, status: "success" as const } 
+                  : b
+              );
+              return [...updated, newStep];
+            });
+          }
+        }
+        break;
+        
+      case "step-skipped":
+        {
+          const skippedStep: LiveLogBlock = {
+            id: `step-${blockIdRef.current++}`,
+            type: "step",
+            title: event.payload.step,
+            status: "skipped",
+            lines: [],
+            startTime: Date.now(),
+            endTime: Date.now()
+          };
+          
+          if (parallelGroupRef.current) {
+            parallelGroupRef.current.children.push(skippedStep);
+          } else {
+            setLiveBlocks(prev => [...prev, skippedStep]);
+          }
+        }
+        break;
+        
+      case "step-end":
+        {
+          const stepStatus = event.payload.skipped ? "skipped" : (event.payload.success ? "success" : "error");
+          const endTime = Date.now();
+          
+          if (parallelGroupRef.current) {
+            const child = parallelGroupRef.current.children.find(c => c.title === event.payload.step);
+            if (child) {
+              child.status = stepStatus;
+              child.endTime = endTime;
+            }
+          } else {
+            setLiveBlocks(prev => prev.map(b => 
+              b.type === "step" && b.title === event.payload.step
+                ? { ...b, status: stepStatus, endTime }
+                : b
+            ));
+          }
+          
+          if (!event.payload.success && event.payload.error) {
+            setLiveLogs(prev => prev + `[ERROR] Step '${event.payload.step}' failed: ${event.payload.error}\n`);
+          }
+        }
+        break;
+        
+      case "parallel-end":
+        if (parallelGroupRef.current) {
+          const group = parallelGroupRef.current;
+          const hasError = group.children.some(c => c.status === "error");
+          const allDone = group.children.every(c => c.status === "success" || c.status === "skipped");
+          
+          const parallelBlock: LiveLogBlock = {
+            id: group.id,
+            type: "parallel",
+            title: `Parallel Group (${group.count} steps)`,
+            status: hasError ? "error" : (allDone ? "success" : "running"),
+            lines: [],
+            children: group.children
+          };
+          
+          setLiveBlocks(prev => {
+            const updated = prev.map(b => 
+              b.type === "info" && b.status === "running" 
+                ? { ...b, status: "success" as const } 
+                : b
+            );
+            return [...updated, parallelBlock];
+          });
+          
+          parallelGroupRef.current = null;
+        }
+        break;
+        
       case "end":
         setLiveLogs(prev => prev + `Pipeline finished. Success: ${event.payload.success}\n`);
         setIsRunning(false);
+        setLiveBlocks(prev => prev.map(b => 
+          b.status === "running" ? { ...b, status: "success" as const } : b
+        ));
         loadHistory();
-        break;
-      case "step-start":
-        // Could add step tracking visualization here
-        break;
-      case "step-end":
-        if (!event.payload.success && event.payload.error) {
-          setLiveLogs(prev => prev + `[ERROR] Step '${event.payload.step}' failed: ${event.payload.error}\n`);
-        }
         break;
     }
   }, [id]);
@@ -549,7 +719,7 @@ export default function PipelineDetail() {
             sx={{ flex: 1, overflowY: 'auto', bgcolor: '#1e1e1e', fontFamily: 'monospace', fontSize: 12 }}
           >
             {selectedRun === 'live' ? (
-              <LogViewer content={liveLogs} isLive />
+              <LogViewer content={liveLogs} liveBlocks={liveBlocks} isLive />
             ) : selectedRun ? (
               logLoading ? (
                 <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}>

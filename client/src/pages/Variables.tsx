@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import {
   Box, Typography, Paper, TextField, Button,
-  Divider, Container, CircularProgress, Tabs, Tab
+  Divider, Container, CircularProgress, Tabs, Tab,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  InputAdornment, IconButton
 } from "@mui/material";
-import { Save, Add, Delete, VpnKey, ContentCopy, Check } from "@mui/icons-material";
+import { Save, Add, Delete, VpnKey, ContentCopy, Check, Visibility, VisibilityOff } from "@mui/icons-material";
 import { getVariables, saveVariables, generateSSHKey, type VariablesConfig } from "../lib/api";
 
 export default function Variables() {
@@ -14,6 +16,13 @@ export default function Variables() {
   const [generating, setGenerating] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"global" | "environments" | "ssh">("global");
+  
+  // Visibility state for variables (key: "global:varKey" or "envName:varKey")
+  const [visibleValues, setVisibleValues] = useState<Set<string>>(new Set());
+  
+  // Dialog state for adding variables
+  const [addVarDialog, setAddVarDialog] = useState<{ open: boolean; type: "global" | "env"; envName?: string }>({ open: false, type: "global" });
+  const [newVarName, setNewVarName] = useState("");
 
   useEffect(() => {
     getVariables()
@@ -35,10 +44,43 @@ export default function Variables() {
     setConfig(prev => ({ ...prev, global: { ...prev.global, [key]: value } }));
   };
 
+  const toggleVisibility = (type: "global" | "env", varKey: string, envName?: string) => {
+    const key = type === "global" ? `global:${varKey}` : `${envName || ""}:${varKey}`;
+    setVisibleValues(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const handleOpenAddVarDialog = (type: "global" | "env", envName?: string) => {
+    setAddVarDialog({ open: true, type, envName });
+    setNewVarName("");
+  };
+
+  const handleCloseAddVarDialog = () => {
+    setAddVarDialog({ open: false, type: "global" });
+    setNewVarName("");
+  };
+
+  const handleAddVar = () => {
+    if (!newVarName.trim()) return;
+    // Trim spaces, replace internal spaces with underscores, convert to uppercase
+    const key = newVarName.trim().replace(/\s+/g, '_').toUpperCase();
+    if (addVarDialog.type === "global") {
+      updateGlobal(key, "");
+    } else if (addVarDialog.envName) {
+      updateEnvVar(addVarDialog.envName, key, "");
+    }
+    handleCloseAddVarDialog();
+  };
+
   const addGlobal = () => {
-    const key = prompt("Enter variable name (e.g. API_KEY):");
-    if (!key) return;
-    updateGlobal(key.toUpperCase(), "");
+    handleOpenAddVarDialog("global");
   };
 
   const removeGlobal = (key: string) => {
@@ -79,9 +121,7 @@ export default function Variables() {
   };
 
   const addEnvVar = (env: string) => {
-    const key = prompt("Enter variable name (e.g. DB_HOST):");
-    if (!key) return;
-    updateEnvVar(env, key.toUpperCase(), "");
+    handleOpenAddVarDialog("env", env);
   };
 
   const removeEnvVar = (env: string, key: string) => {
@@ -194,20 +234,37 @@ export default function Variables() {
               </Typography>
             </Typography>
 
-            {Object.entries(config.global).map(([key, val]) => (
-              <Box key={key} sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
-                <TextField label="Key" value={key} disabled sx={{ flex: 1 }} />
-                <TextField
-                  label="Value"
-                  value={val}
-                  onChange={e => updateGlobal(key, e.target.value)}
-                  fullWidth
-                  sx={{ flex: 2 }}
-                  type="password"
-                />
-                <Button color="error" onClick={() => removeGlobal(key)}><Delete /></Button>
-              </Box>
-            ))}
+            {Object.entries(config.global).map(([key, val]) => {
+              const visibilityKey = `global:${key}`;
+              const isVisible = visibleValues.has(visibilityKey);
+              return (
+                <Box key={key} sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
+                  <TextField label="Key" value={key} disabled sx={{ flex: 1 }} />
+                  <TextField
+                    label="Value"
+                    value={val}
+                    onChange={e => updateGlobal(key, e.target.value)}
+                    fullWidth
+                    sx={{ flex: 2 }}
+                    type={isVisible ? "text" : "password"}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => toggleVisibility("global", key)}
+                            edge="end"
+                            size="small"
+                          >
+                            {isVisible ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                  <Button color="error" onClick={() => removeGlobal(key)}><Delete /></Button>
+                </Box>
+              );
+            })}
 
             {Object.keys(config.global).length === 0 && (
               <Typography color="text.secondary" sx={{ mb: 2, fontStyle: 'italic' }}>
@@ -237,21 +294,38 @@ export default function Variables() {
                 </Box>
                 <Divider sx={{ mb: 2 }} />
 
-                {Object.entries(vars).map(([key, val]) => (
-                  <Box key={key} sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
-                    <TextField label="Key" value={key} disabled sx={{ flex: 1 }} size="small" />
-                    <TextField
-                      label="Value"
-                      value={val}
-                      onChange={e => updateEnvVar(envName, key, e.target.value)}
-                      fullWidth
-                      size="small"
-                      sx={{ flex: 2 }}
-                      type="password"
-                    />
-                    <Button color="error" onClick={() => removeEnvVar(envName, key)}><Delete /></Button>
-                  </Box>
-                ))}
+                {Object.entries(vars).map(([key, val]) => {
+                  const visibilityKey = `${envName}:${key}`;
+                  const isVisible = visibleValues.has(visibilityKey);
+                  return (
+                    <Box key={key} sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
+                      <TextField label="Key" value={key} disabled sx={{ flex: 1 }} size="small" />
+                      <TextField
+                        label="Value"
+                        value={val}
+                        onChange={e => updateEnvVar(envName, key, e.target.value)}
+                        fullWidth
+                        size="small"
+                        sx={{ flex: 2 }}
+                        type={isVisible ? "text" : "password"}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={() => toggleVisibility("env", key, envName)}
+                                edge="end"
+                                size="small"
+                              >
+                                {isVisible ? <VisibilityOff /> : <Visibility />}
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                      <Button color="error" onClick={() => removeEnvVar(envName, key)}><Delete /></Button>
+                    </Box>
+                  );
+                })}
 
                 {Object.keys(vars).length === 0 && (
                   <Typography color="text.secondary" sx={{ mb: 2, fontStyle: 'italic' }}>
@@ -404,6 +478,43 @@ export default function Variables() {
           </Box>
         )}
       </Paper>
+
+      {/* Add Variable Dialog */}
+      <Dialog open={addVarDialog.open} onClose={handleCloseAddVarDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          Add {addVarDialog.type === "global" ? "Global" : "Environment"} Variable
+        </DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Variable Name"
+            placeholder="e.g. API_KEY, DB_HOST"
+            fullWidth
+            variant="standard"
+            value={newVarName}
+            onChange={(e) => {
+              // Allow only English letters, numbers, underscores, and spaces (spaces will be replaced)
+              // Filter out invalid characters, trim spaces, replace internal spaces with underscores
+              const filtered = e.target.value.replace(/[^a-zA-Z0-9_\s]/g, '');
+              const processed = filtered.trim().replace(/\s+/g, '_');
+              setNewVarName(processed);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && newVarName.trim()) {
+                handleAddVar();
+              }
+            }}
+            helperText="Only English letters, numbers, and underscores allowed. Spaces will be replaced with underscores, name will be converted to UPPERCASE"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseAddVarDialog}>Cancel</Button>
+          <Button onClick={handleAddVar} variant="contained" disabled={!newVarName.trim()}>
+            Add
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }

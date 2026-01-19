@@ -423,6 +423,115 @@ export default function StepCard({
               />
             )}
 
+            {/* Skip Condition */}
+            <Box>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={!!step.skipWhen}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        updateStep({
+                          skipWhen: { variable: "" },
+                        });
+                      } else {
+                        updateStep({ skipWhen: undefined });
+                      }
+                    }}
+                    disabled={readOnly}
+                    size="small"
+                  />
+                }
+                label={
+                  <Typography variant="body2">
+                    Skip this step when condition is met
+                  </Typography>
+                }
+              />
+              {step.skipWhen && (
+                <Box sx={{ mt: 1.5, ml: 4, display: "flex", flexDirection: "column", gap: 1.5 }}>
+                  <TextField
+                    size="small"
+                    label="Variable Path"
+                    value={step.skipWhen.variable || ""}
+                    onChange={(e) =>
+                      updateStep({
+                        skipWhen: { ...step.skipWhen!, variable: e.target.value },
+                      })
+                    }
+                    placeholder="inputs.skipBuild"
+                    disabled={readOnly}
+                    helperText="Available: inputs.*, env.*, results.stepName.*, prev.* (e.g., inputs.skipBuild, env.SKIP_TEST, results.build.skip)"
+                    fullWidth
+                  />
+                  <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+                    <FormControl size="small" sx={{ minWidth: 120 }}>
+                      <InputLabel>Condition</InputLabel>
+                      <Select
+                        value={
+                          step.skipWhen.equals !== undefined
+                            ? "equals"
+                            : step.skipWhen.notEquals !== undefined
+                            ? "notEquals"
+                            : "equals"
+                        }
+                        label="Condition"
+                        onChange={(e) => {
+                          const condition = e.target.value;
+                          const currentValue =
+                            step.skipWhen?.equals ?? step.skipWhen?.notEquals;
+                          updateStep({
+                            skipWhen: {
+                              ...step.skipWhen!,
+                              equals: condition === "equals" ? currentValue : undefined,
+                              notEquals: condition === "notEquals" ? currentValue : undefined,
+                            },
+                          });
+                        }}
+                        disabled={readOnly}
+                      >
+                        <MenuItem value="equals">Equals</MenuItem>
+                        <MenuItem value="notEquals">Not Equals</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <TextField
+                      size="small"
+                      label="Value"
+                      value={
+                        String(
+                          step.skipWhen.equals ?? step.skipWhen.notEquals ?? ""
+                        )
+                      }
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        const condition = step.skipWhen!;
+                        // Try to parse as number or boolean, otherwise keep as string
+                        let parsedValue: string | number | boolean = value;
+                        if (value === "true") parsedValue = true;
+                        else if (value === "false") parsedValue = false;
+                        else if (!isNaN(Number(value)) && value !== "")
+                          parsedValue = Number(value);
+
+                        if (condition.equals !== undefined) {
+                          updateStep({
+                            skipWhen: { ...condition, equals: parsedValue },
+                          });
+                        } else {
+                          updateStep({
+                            skipWhen: { ...condition, notEquals: parsedValue },
+                          });
+                        }
+                      }}
+                      placeholder="true, false, 'value', 123"
+                      disabled={readOnly}
+                      helperText="Value to compare (supports string, number, boolean)"
+                      sx={{ flex: 1 }}
+                    />
+                  </Box>
+                </Box>
+              )}
+            </Box>
+
             {/* Module parameters */}
             {step.module && schema && (
               <>

@@ -14,6 +14,9 @@ import { finishRun } from "./db.ts";
 import { sanitizeLogMessage, validatePipelineId } from "./utils/index.ts";
 import type { PipelineStep, PipelineContext, RunningPipeline, StepItem } from "./types/index.ts";
 
+// Forbidden keys to prevent prototype pollution (same as in interpolation.ts)
+const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
 // Re-export from repository and sandbox for backward compatibility
 export { loadPipeline, savePipeline, listPipelines, deletePipeline, isDemoPipeline } from "./pipeline-repository.ts";
 export { cleanupOldSandboxes } from "./sandbox.ts";
@@ -249,7 +252,8 @@ export async function runPipeline(
   const totalSteps = countTotalSteps(pipeline.steps);
   pubsub.publish({ type: "start", pipelineId: id, payload: { runId, totalSteps } });
 
-  const log = (msg: string) => {
+  // Log function with optional step context
+  const log = (msg: string, stepName?: string) => {
     console.log(msg);
     const ts = new Date().toISOString();
     const line = `[${ts}] ${msg}\n`;
@@ -262,10 +266,11 @@ export async function runPipeline(
 
     logBuffer += line;
     runningInfo.logBuffer = logBuffer;
-    pubsub.publish({ type: "log", pipelineId: id, payload: { runId, msg, ts } });
+    pubsub.publish({ type: "log", pipelineId: id, payload: { runId, msg, ts, stepName } });
   };
 
-  const sanitizedLog = (msg: string): void => {
+  // Pipeline-level log (without step context)
+  const pipelineLog = (msg: string): void => {
     log(sanitizeLogMessage(msg));
   };
 
@@ -275,15 +280,19 @@ export async function runPipeline(
     // Create minimal context for env interpolation (only inputs available at this point)
     const envInterpolationCtx = { inputs } as unknown as PipelineContext;
     resolvedPipelineEnv = interpolate(pipeline.env, envInterpolationCtx) as string;
-    sanitizedLog(`[Engine] Resolved environment: ${pipeline.env} → ${resolvedPipelineEnv}`);
+    pipelineLog(`[Engine] Resolved environment: ${pipeline.env} → ${resolvedPipelineEnv}`);
   }
 
-  // Create context
+  // Create context - each step will get its own log function with bound stepName
   const mergedEnv = await getMergedEnv(resolvedPipelineEnv);
   const sshKeys = await getSSHPrivateKeys();
-  const ctx = createPipelineContext(sandboxPath, mergedEnv, sshKeys, id, startTime, sanitizedLog, controller.signal, inputs, runId, pipeline.name);
+  const ctx = createPipelineContext(sandboxPath, mergedEnv, sshKeys, id, startTime, pipelineLog, controller.signal, inputs, runId, pipeline.name);
 
-  sanitizedLog(`[Sandbox] Created isolated working directory: ${sandboxPath}`);
+  pipelineLog(`[Sandbox] Created isolated working directory: ${sandboxPath}`);
+  
+  // Log environment variables for debugging (only keys, not values for security)
+  const envKeys = Object.keys(mergedEnv);
+  pipelineLog(`[Engine] Environment "${resolvedPipelineEnv || 'none'}": ${envKeys.length} variables (${envKeys.slice(0, 10).join(', ')}${envKeys.length > 10 ? '...' : ''})`);
 
   // Normalize steps: single steps become [step], arrays stay as parallel groups
   const stepGroups = normalizeSteps(pipeline.steps);
@@ -293,19 +302,126 @@ export async function runPipeline(
     validateDependencies(stepGroups);
   } catch (e: unknown) {
     const errorMsg = e instanceof Error ? e.message : String(e);
-    sanitizedLog(`[Engine] Dependency validation failed: ${errorMsg}`);
+    pipelineLog(`[Engine] Dependency validation failed: ${errorMsg}`);
     throw e;
   }
 
   // Track step execution status for dependency checking
   const stepStatuses = new Map<string, boolean>();
+  
+  // Track module usage count for auto-generating step names (e.g., "shell_1", "delay_2")
+  const moduleUsageCount = new Map<string, number>();
+
+  // Check if step should be skipped based on skipWhen condition
+  // Supports variables from PipelineContext:
+  // - inputs.* (e.g., inputs.skipBuild)
+  // - env.* (e.g., env.SKIP_TEST)
+  // - results.stepName.* (e.g., results.build.skip) - results from named steps
+  // - prev.* (e.g., prev.skip) - result from previous step
+  // Also supports interpolation in variable path (e.g., "${inputs.env}.SKIP_BUILD")
+  function shouldSkipStep(step: PipelineStep, ctx: PipelineContext): boolean {
+    if (!step.skipWhen) return false;
+    
+    const condition = step.skipWhen;
+    
+    // Support interpolation in variable path (e.g., "${inputs.env}.SKIP_BUILD")
+    let variablePath = condition.variable;
+    if (variablePath.includes("${")) {
+      variablePath = interpolate(variablePath, ctx) as string;
+    }
+    
+    const pathParts = variablePath.split('.');
+    
+    // Get value from context using the path
+    // Supports nested access: inputs.skipBuild, env.SKIP_TEST, results.stepName.skip, prev.skip
+    let value: unknown = ctx;
+    for (const key of pathParts) {
+      // Validate key to prevent prototype pollution
+      if (FORBIDDEN_KEYS.has(key)) {
+        return false;
+      }
+      value = value?.[key];
+    }
+    
+    // Helper for loose comparison (handles "1" == 1, "true" == true, etc.)
+    const looseEquals = (a: unknown, b: unknown): boolean => {
+      // Strict equality first
+      if (a === b) return true;
+      
+      // Handle string to number comparison
+      if (typeof a === "string" && typeof b === "number") {
+        return Number(a) === b;
+      }
+      if (typeof a === "number" && typeof b === "string") {
+        return a === Number(b);
+      }
+      
+      // Handle string to boolean comparison
+      if (typeof a === "string" && typeof b === "boolean") {
+        const lower = a.toLowerCase();
+        if (b === true) return lower === "true" || lower === "1";
+        if (b === false) return lower === "false" || lower === "0";
+      }
+      if (typeof a === "boolean" && typeof b === "string") {
+        const lower = b.toLowerCase();
+        if (a === true) return lower === "true" || lower === "1";
+        if (a === false) return lower === "false" || lower === "0";
+      }
+      
+      return false;
+    };
+    
+    // Check equals condition
+    if (condition.equals !== undefined) {
+      return looseEquals(value, condition.equals);
+    }
+    
+    // Check notEquals condition
+    if (condition.notEquals !== undefined) {
+      return !looseEquals(value, condition.notEquals);
+    }
+    
+    return false;
+  }
 
   // Execute step function
   const executeStep = async (step: PipelineStep, stepIndex: number) => {
+    // Generate step name: use provided name/description, or auto-generate as "module_N"
+    let stepName: string;
+    if (step.description || step.name) {
+      stepName = step.description || step.name!;
+    } else {
+      // Auto-generate name: module_1, module_2, etc.
+      const count = (moduleUsageCount.get(step.module) || 0) + 1;
+      moduleUsageCount.set(step.module, count);
+      stepName = `${step.module}_${count}`;
+    }
+    
+    // Create step-specific logger that always uses this step's name (fixes race condition in parallel execution)
+    const stepSpecificLog = (msg: string) => log(sanitizeLogMessage(msg), stepName);
+    
     // Check dependencies before execution
-    checkDependencies(step, stepStatuses, sanitizedLog);
-    const stepName = step.description || step.name || step.module;
-    log(`Running step: ${stepName}`);
+    checkDependencies(step, stepStatuses, stepSpecificLog);
+    
+    // Check if step should be skipped
+    if (shouldSkipStep(step, ctx)) {
+      // Marker for saved logs parsing (not used in live mode)
+      log(`SKIPPED: ${stepName} (condition: ${step.skipWhen?.variable})`, stepName);
+      pubsub.publish({ type: "step-skipped", pipelineId: id, payload: { runId, step: stepName, stepIndex, totalSteps } });
+      
+      const stepId = startStep(dbRunId, stepName, step.module);
+      const skippedResult = { skipped: true, reason: step.skipWhen?.variable };
+      endStep(stepId, true, skippedResult, undefined, true);
+      
+      // Track as success for dependency checking (skipped steps are considered successful)
+      if (step.name) stepStatuses.set(step.name, true);
+      
+      pubsub.publish({ type: "step-end", pipelineId: id, payload: { runId, step: stepName, stepIndex, totalSteps, success: true, skipped: true } });
+      return { step, result: skippedResult, stepIndex, skipped: true };
+    }
+    
+    // Marker for saved logs parsing (not used in live mode)
+    log(`Running step: ${stepName}`, stepName);
     pubsub.publish({ type: "step-start", pipelineId: id, payload: { runId, step: stepName, stepIndex, totalSteps } });
 
     const stepId = startStep(dbRunId, stepName, step.module);
@@ -319,14 +435,40 @@ export async function runPipeline(
 
     const resolvedParams = interpolate(step.params || {}, ctx) as Record<string, unknown>;
 
+    // Create step-specific context with bound logger (fixes race condition in parallel execution)
+    // Manually create new context object with overridden log
+    const stepCtx: PipelineContext = {
+      workDir: ctx.workDir,
+      env: ctx.env,
+      inputs: ctx.inputs,
+      sshKey: ctx.sshKey,
+      pipelineId: ctx.pipelineId,
+      startTime: ctx.startTime,
+      log: stepSpecificLog,  // Override with step-specific logger
+      signal: ctx.signal,
+      BUILD_ID: ctx.BUILD_ID,
+      UNIXTIMESTAMP: ctx.UNIXTIMESTAMP,
+      WORK_DIR: ctx.WORK_DIR,
+      DATE: ctx.DATE,
+      TIME: ctx.TIME,
+      DATETIME: ctx.DATETIME,
+      YEAR: ctx.YEAR,
+      MONTH: ctx.MONTH,
+      DAY: ctx.DAY,
+      PIPELINE_NAME: ctx.PIPELINE_NAME,
+      prev: ctx.prev,
+      results: ctx.results,
+    };
+
     try {
-      const result = await mod.run(ctx, resolvedParams);
-      log(`Step '${stepName}' completed. Result: ${JSON.stringify(result)}`);
+      const result = await mod.run(stepCtx, resolvedParams);
+      // Marker for saved logs parsing (not used in live mode)
+      log(`Step '${stepName}' completed`, stepName);
       pubsub.publish({ type: "step-end", pipelineId: id, payload: { runId, step: stepName, stepIndex, totalSteps, success: true } });
       endStep(stepId, true, result);
       // Track success for dependency checking
       if (step.name) stepStatuses.set(step.name, true);
-      return { step, result, stepIndex };
+      return { step, result, stepIndex, skipped: false };
     } catch (e: unknown) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       pubsub.publish({ type: "step-end", pipelineId: id, payload: { runId, step: stepName, stepIndex, totalSteps, success: false, error: errorMsg } });
@@ -349,11 +491,21 @@ export async function runPipeline(
           if (step.name) ctx.results[step.name] = result;
           currentStepIndex++;
         } else {
-          log(`Running ${group.length} steps in parallel`);
+          // Parallel group
+          // Marker for saved logs parsing (not used in live mode)
+          pipelineLog(`Running ${group.length} steps in parallel`);
+          pubsub.publish({ type: "parallel-start", pipelineId: id, payload: { runId, count: group.length } });
+          
           const startIndex = currentStepIndex;
           const results = await Promise.all(
             group.map((step, i) => executeStep(step, startIndex + i))
           );
+
+          // Collect executed and skipped step names
+          const executed = results.filter(r => !r.skipped).map(r => r.step.name || r.step.module);
+          const skipped = results.filter(r => r.skipped).map(r => r.step.name || r.step.module);
+          
+          pubsub.publish({ type: "parallel-end", pipelineId: id, payload: { runId, executed, skipped } });
 
           for (const { step, result } of results) {
             if (step.name) ctx.results[step.name] = result;
@@ -365,7 +517,7 @@ export async function runPipeline(
     } catch (e: unknown) {
       success = false;
       const errorMsg = e instanceof Error ? e.message : String(e);
-      log(`Pipeline failed: ${errorMsg}`);
+      pipelineLog(`Pipeline failed: ${errorMsg}`);
     } finally {
       // Stop persistent Docker container if used
       if (config.dockerEnabled) {
@@ -374,14 +526,14 @@ export async function runPipeline(
 
       // Cleanup sandbox
       if (!pipeline.keepWorkDir) {
-        await cleanupSandbox(sandboxPath, log);
+        await cleanupSandbox(sandboxPath, pipelineLog);
       } else {
-        log(`[Sandbox] Keeping working directory for debugging: ${sandboxPath}`);
+        pipelineLog(`[Sandbox] Keeping working directory for debugging: ${sandboxPath}`);
       }
     }
 
     const duration = Date.now() - ctx.startTime;
-    log(`\nPipeline finished. Duration: ${duration}ms`);
+    pipelineLog(`\nPipeline finished. Duration: ${duration}ms`);
 
     saveLog(dbRunId, success ? "success" : "fail", logBuffer, duration);
     pubsub.publish({ type: "end", pipelineId: id, payload: { runId, success } });
