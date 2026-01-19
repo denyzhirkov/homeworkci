@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Box, Typography, Paper, TextField, Button,
   Divider, Container, CircularProgress, Tabs, Tab,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  InputAdornment, IconButton
+  InputAdornment, IconButton, Snackbar, Alert, LinearProgress
 } from "@mui/material";
 import { Save, Add, Delete, VpnKey, ContentCopy, Check, Visibility, VisibilityOff } from "@mui/icons-material";
 import { getVariables, saveVariables, generateSSHKey, type VariablesConfig } from "../lib/api";
@@ -23,20 +23,106 @@ export default function Variables() {
   // Dialog state for adding variables
   const [addVarDialog, setAddVarDialog] = useState<{ open: boolean; type: "global" | "env"; envName?: string }>({ open: false, type: "global" });
   const [newVarName, setNewVarName] = useState("");
+  
+  // Snackbar state for notifications
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({ 
+    open: false, message: "", severity: "success" 
+  });
+  
+  // Autosave state
+  const [hasChanges, setHasChanges] = useState(false);
+  const [saveProgress, setSaveProgress] = useState(0); // 0-100
+  const [isSaving, setIsSaving] = useState(false);
+  const debounceTimerRef = useRef<number | null>(null);
+  const progressTimerRef = useRef<number | null>(null);
+  const initialLoadRef = useRef(true);
 
   useEffect(() => {
     getVariables()
-      .then(setConfig)
+      .then((data) => {
+        setConfig(data);
+        initialLoadRef.current = false;
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
-
-  const handleSave = async () => {
+  
+  // Autosave effect - triggers when config changes
+  useEffect(() => {
+    // Skip on initial load
+    if (initialLoadRef.current || loading) return;
+    
+    setHasChanges(true);
+    setSaveProgress(0);
+    
+    // Clear existing timers
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+    
+    // Start debounce timer (5 seconds)
+    debounceTimerRef.current = window.setTimeout(() => {
+      // Start progress bar animation (2 seconds = 2000ms, update every 20ms = 100 steps)
+      const progressStep = 100 / 100; // 1% per step
+      const progressInterval = 2000 / 100; // 20ms per step
+      
+      progressTimerRef.current = window.setInterval(() => {
+        setSaveProgress(prev => {
+          const next = prev + progressStep;
+          if (next >= 100) {
+            // Clear interval and trigger save
+            if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+            return 100;
+          }
+          return next;
+        });
+      }, progressInterval);
+    }, 5000);
+    
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+    };
+  }, [config, loading]);
+  
+  // Trigger save when progress reaches 100
+  useEffect(() => {
+    if (saveProgress >= 100 && hasChanges && !isSaving) {
+      performAutoSave();
+    }
+  }, [saveProgress]);
+  
+  const performAutoSave = useCallback(async () => {
+    setIsSaving(true);
     try {
       await saveVariables(config);
-      alert("Variables saved successfully");
+      setHasChanges(false);
+      setSaveProgress(0);
+      setSnackbar({ open: true, message: "Changes saved automatically", severity: "success" });
     } catch (e) {
-      alert("Error saving variables: " + e);
+      setSnackbar({ open: true, message: "Error saving: " + e, severity: "error" });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [config]);
+  
+  // Cancel autosave (for manual save)
+  const cancelAutosave = () => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+    setSaveProgress(0);
+  };
+
+  const handleSave = async () => {
+    cancelAutosave();
+    setIsSaving(true);
+    try {
+      await saveVariables(config);
+      setHasChanges(false);
+      setSnackbar({ open: true, message: "Variables saved successfully", severity: "success" });
+    } catch (e) {
+      setSnackbar({ open: true, message: "Error saving variables: " + e, severity: "error" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -148,8 +234,9 @@ export default function Variables() {
         sshKeys: { ...(prev.sshKeys || {}), [name]: keyPair }
       }));
       setNewKeyName("");
+      setSnackbar({ open: true, message: `SSH key "${name}" generated successfully`, severity: "success" });
     } catch (e) {
-      alert("Error generating SSH key: " + e);
+      setSnackbar({ open: true, message: "Error generating SSH key: " + e, severity: "error" });
     } finally {
       setGenerating(false);
     }
@@ -170,7 +257,7 @@ export default function Variables() {
       setCopiedKey(name);
       setTimeout(() => setCopiedKey(null), 2000);
     } catch {
-      alert("Failed to copy to clipboard");
+      setSnackbar({ open: true, message: "Failed to copy to clipboard", severity: "error" });
     }
   };
 
@@ -187,20 +274,54 @@ export default function Variables() {
   return (
     <Container maxWidth="lg">
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1, mb: 2 }}>
-        <Typography variant="h5" component="h1">
-          Variables
-          <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1.5 }}>
-            — Manage global values, per-environment overrides, and SSH keys
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h5" component="h1">
+            Variables
+            <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1.5 }}>
+              — Manage global values, per-environment overrides, and SSH keys
+            </Typography>
           </Typography>
-        </Typography>
+          {hasChanges && !saveProgress && (
+            <Typography variant="caption" color="warning.main" sx={{ fontStyle: 'italic' }}>
+              Unsaved changes
+            </Typography>
+          )}
+        </Box>
         <Button
           variant="contained"
-          startIcon={<Save />}
+          startIcon={isSaving ? <CircularProgress size={16} color="inherit" /> : <Save />}
           onClick={handleSave}
+          disabled={isSaving}
         >
-          Save Changes
+          {isSaving ? "Saving..." : "Save Changes"}
         </Button>
       </Box>
+
+      {/* Autosave progress bar */}
+      {saveProgress > 0 && saveProgress < 100 && (
+        <Box sx={{ mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+            <Typography variant="caption" color="text.secondary">
+              Auto-saving in {Math.ceil((100 - saveProgress) / 50)}s...
+            </Typography>
+            <Button size="small" onClick={cancelAutosave} sx={{ minWidth: 'auto', p: 0.5 }}>
+              Cancel
+            </Button>
+          </Box>
+          <LinearProgress 
+            variant="determinate" 
+            value={saveProgress} 
+            sx={{ 
+              height: 4, 
+              borderRadius: 2,
+              bgcolor: 'action.hover',
+              '& .MuiLinearProgress-bar': {
+                borderRadius: 2,
+              }
+            }} 
+          />
+        </Box>
+      )}
 
       <Paper sx={{ mb: 3, p: 0 }}>
         <Tabs
@@ -515,6 +636,23 @@ export default function Variables() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert 
+          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} 
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 }
