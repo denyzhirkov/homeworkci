@@ -114,6 +114,7 @@ const navItems = [
   { id: 'mod-shell', label: 'shell', indent: 1 },
   { id: 'mod-http', label: 'http', indent: 1 },
   { id: 'mod-git', label: 'git', indent: 1 },
+  { id: 'mod-crypto', label: 'crypto', indent: 1 },
   { id: 'mod-fs', label: 'fs', indent: 1 },
   { id: 'mod-delay', label: 'delay', indent: 1 },
   { id: 'mod-notify', label: 'notify', indent: 1 },
@@ -458,19 +459,125 @@ export default function Documentation() {
           id="mod-git"
           icon={<Code fontSize="small" />}
           title="git"
-          description="Performs Git operations like clone and pull."
+          description="Performs Git operations: clone, pull, commit, push, tag, checkout, branch, status, log, info."
           params={[
-            { name: 'op', type: '"clone" | "pull"', required: true, description: 'Operation type' },
+            { name: 'op', type: '"clone" | "pull" | "commit" | "push" | "tag" | "checkout" | "branch" | "status" | "log" | "info"', required: true, description: 'Operation type' },
             { name: 'repo', type: 'string', description: 'Repository URL (required for clone)' },
-            { name: 'dir', type: 'string', description: 'Target directory' }
+            { name: 'dir', type: 'string', description: 'Target directory' },
+            { name: 'message', type: 'string', description: 'Commit message (required for commit)' },
+            { name: 'add', type: 'boolean', description: 'Add all changes before commit (for commit)' },
+            { name: 'remote', type: 'string', description: 'Remote name (default: origin, for push)' },
+            { name: 'branch', type: 'string', description: 'Branch name (for push, checkout, branch)' },
+            { name: 'tagName', type: 'string', description: 'Tag name (for tag)' },
+            { name: 'tagOp', type: '"create" | "delete"', description: 'Tag operation (for tag, default: create)' },
+            { name: 'branchOp', type: '"create" | "delete"', description: 'Branch operation (for branch, default: create)' },
+            { name: 'limit', type: 'number', description: 'Number of commits to return (for log, default: 10)' }
           ]}
-          returns='{ "success": true } or { "skipped": true }'
-          example={`{
+          returns='clone/pull/commit/push/tag/checkout/branch: { "success": true } or { "skipped": true }. status: Object with branch, clean status, files array. log: Object with commits array. info: Object with branch, commit, author, email, remoteUrl.'
+          example={`// Clone repository
+{
   "module": "git",
   "params": {
     "op": "clone",
     "repo": "https://github.com/user/repo.git",
     "dir": "./repo"
+  }
+}
+
+// Commit changes
+{
+  "module": "git",
+  "params": {
+    "op": "commit",
+    "message": "Update files",
+    "add": true
+  }
+}
+
+// Get repository status
+{
+  "module": "git",
+  "params": {
+    "op": "status"
+  }
+}
+
+// Get commit history
+{
+  "module": "git",
+  "params": {
+    "op": "log",
+    "limit": 10
+  }
+}`}
+        />
+
+        <ModuleDoc
+          id="mod-crypto"
+          icon={<Code fontSize="small" />}
+          title="crypto"
+          description="Cryptographic operations: hash generation (MD5, SHA-256, SHA-512), encoding/decoding (Base64, Hex), random token generation, encryption/decryption (AES-GCM, AES-CBC)."
+          params={[
+            { name: 'op', type: '"hash" | "encode" | "decode" | "random" | "encrypt" | "decrypt"', required: true, description: 'Operation type' },
+            { name: 'input', type: 'string', description: 'Input data (required for hash, encode, decode, encrypt, decrypt)' },
+            { name: 'algorithm', type: '"MD5" | "SHA-256" | "SHA-512" | "AES-GCM" | "AES-CBC"', description: 'Hash or encryption algorithm (required for hash, encrypt, decrypt)' },
+            { name: 'encoding', type: '"hex" | "base64" | "base64url"', description: 'Encoding format (for hash, encode, decode, random, default: hex)' },
+            { name: 'key', type: 'string', description: 'Encryption key in base64 or hex format (required for encrypt, decrypt)' },
+            { name: 'iv', type: 'string', description: 'Initialization vector in base64 format (required for decrypt)' },
+            { name: 'length', type: 'number', description: 'Length of random token in bytes (for random, default: 32)' }
+          ]}
+          returns='hash: { "hash": string, "algorithm": string, "encoding": string }. encode: Encoded string. decode: Decoded string. random: Random token string. encrypt: { "encrypted": string, "algorithm": string, "iv": string }. decrypt: Decrypted string.'
+          example={`// Generate SHA-256 hash
+{
+  "module": "crypto",
+  "params": {
+    "op": "hash",
+    "input": "hello world",
+    "algorithm": "SHA-256",
+    "encoding": "hex"
+  }
+}
+
+// Base64 encoding
+{
+  "module": "crypto",
+  "params": {
+    "op": "encode",
+    "input": "hello",
+    "encoding": "base64"
+  }
+}
+
+// Generate random token
+{
+  "module": "crypto",
+  "params": {
+    "op": "random",
+    "length": 32,
+    "encoding": "hex"
+  }
+}
+
+// Encrypt data
+{
+  "module": "crypto",
+  "params": {
+    "op": "encrypt",
+    "input": "secret data",
+    "key": "base64encodedkey...",
+    "algorithm": "AES-GCM"
+  }
+}
+
+// Decrypt data
+{
+  "module": "crypto",
+  "params": {
+    "op": "decrypt",
+    "input": "\${results.encryptStep.encrypted}",
+    "key": "base64encodedkey...",
+    "algorithm": "AES-GCM",
+    "iv": "\${results.encryptStep.iv}"
   }
 }`}
         />

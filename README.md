@@ -5,7 +5,7 @@ Minimalist self-hosted CI/CD server built with Deno and React. Define pipelines 
 ## Features
 
 - **JSON Pipelines** — Define automation workflows in simple JSON format
- - **Modular Steps** — Built-in modules: shell, docker, docker_remote, http, git, fs, delay, notify, archive, ssh, s3, json, pipeline, queue
+ - **Modular Steps** — Built-in modules: shell, docker, docker_remote, http, git, fs, delay, notify, archive, ssh, s3, json, pipeline, queue, crypto
 - **Docker Runner** — Execute steps in isolated Docker containers with resource limits
 - **Parallel Execution** — Run multiple steps simultaneously
 - **Variable Interpolation** — Access step results via `${results.stepName}` and `${prev}`
@@ -99,7 +99,7 @@ Pipelines are JSON files in the `pipelines/` directory:
 |-------|------|-------------|
 | `name` | string | Step name (used for `${results.name}`) |
 | `description` | string | Step description |
-| `module` | string | Module to execute: `shell`, `docker`, `docker_remote`, `http`, `git`, `fs`, `delay` |
+| `module` | string | Module to execute: `shell`, `docker`, `docker_remote`, `http`, `git`, `fs`, `delay`, `crypto` |
 | `params` | object | Module-specific parameters |
 | `dependsOn` | string \| string[] | Step names this step depends on (must succeed first) |
 
@@ -356,7 +356,7 @@ Make HTTP requests.
 
 ### git
 
-Git operations.
+Git operations: clone, pull, commit, push, tag, checkout, branch, status, log, info.
 
 ```json
 {
@@ -369,11 +369,113 @@ Git operations.
 }
 ```
 
+```json
+{
+  "module": "git",
+  "params": {
+    "op": "commit",
+    "message": "Update files",
+    "add": true
+  }
+}
+```
+
+```json
+{
+  "module": "git",
+  "params": {
+    "op": "status"
+  }
+}
+```
+
 | Parameter | Description |
 |-----------|-------------|
-| `op` | Operation: `clone` or `pull` |
-| `repo` | Repository URL (for clone) |
+| `op` | Operation: `clone`, `pull`, `commit`, `push`, `tag`, `checkout`, `branch`, `status`, `log`, `info` |
+| `repo` | Repository URL (required for clone) |
 | `dir` | Target directory |
+| `message` | Commit message (required for commit) |
+| `add` | Add all changes before commit (for commit) |
+| `remote` | Remote name (default: origin, for push) |
+| `branch` | Branch name (for push, checkout, branch) |
+| `tagName` | Tag name (for tag) |
+| `tagOp` | Tag operation: `create` or `delete` (for tag) |
+| `branchOp` | Branch operation: `create` or `delete` (for branch) |
+| `limit` | Number of commits to return (for log, default: 10) |
+
+Returns:
+- `clone`, `pull`, `commit`, `push`, `tag`, `checkout`, `branch`: `{ "success": true }` or `{ "skipped": true }`
+- `status`: Object with branch, clean status, files array, and statistics
+- `log`: Object with commits array and count
+- `info`: Object with branch, commit, author, email, remoteUrl
+
+### crypto
+
+Cryptographic operations: hash generation, encoding/decoding, random tokens, encryption/decryption.
+
+```json
+{
+  "module": "crypto",
+  "params": {
+    "op": "hash",
+    "input": "hello world",
+    "algorithm": "SHA-256",
+    "encoding": "hex"
+  }
+}
+```
+
+```json
+{
+  "module": "crypto",
+  "params": {
+    "op": "encode",
+    "input": "hello",
+    "encoding": "base64"
+  }
+}
+```
+
+```json
+{
+  "module": "crypto",
+  "params": {
+    "op": "random",
+    "length": 32,
+    "encoding": "hex"
+  }
+}
+```
+
+```json
+{
+  "module": "crypto",
+  "params": {
+    "op": "encrypt",
+    "input": "secret data",
+    "key": "base64encodedkey...",
+    "algorithm": "AES-GCM"
+  }
+}
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `op` | Operation: `hash`, `encode`, `decode`, `random`, `encrypt`, `decrypt` |
+| `input` | Input data (required for hash, encode, decode, encrypt, decrypt) |
+| `algorithm` | Hash/encrypt algorithm: `MD5`, `SHA-256`, `SHA-512`, `AES-GCM`, `AES-CBC` (required for hash, encrypt, decrypt) |
+| `encoding` | Encoding format: `hex`, `base64`, `base64url` (for hash, encode, decode, random, default: hex) |
+| `key` | Encryption key in base64 or hex format (required for encrypt, decrypt) |
+| `iv` | Initialization vector in base64 format (required for decrypt) |
+| `length` | Length of random token in bytes (for random, default: 32) |
+
+Returns:
+- `hash`: `{ "hash": string, "algorithm": string, "encoding": string }`
+- `encode`: Encoded string
+- `decode`: Decoded string
+- `random`: Random token string
+- `encrypt`: `{ "encrypted": string, "algorithm": string, "iv": string }`
+- `decrypt`: Decrypted string
 
 ### fs
 
