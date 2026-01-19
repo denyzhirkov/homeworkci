@@ -147,6 +147,16 @@ export async function run(
   if (!params.user) throw new Error("docker_remote requires 'user'");
   if (!params.image) throw new Error("docker_remote requires 'image'");
 
+  // Generate container name if not provided
+  const containerName = params.name || `${extractImageBaseName(params.image)}_hwci`;
+  if (ctx.log) {
+    if (params.name) {
+      ctx.log(`[docker_remote] Using provided container name: ${containerName}`);
+    } else {
+      ctx.log(`[docker_remote] Generated container name: ${containerName} (from image: ${params.image})`);
+    }
+  }
+
   // Resolve private key: either from keyName or direct privateKey
   let privateKey = params.privateKey;
   if (params.keyName) {
@@ -181,7 +191,19 @@ export async function run(
     await Deno.writeTextFile(keyPath, privateKey);
     await Deno.chmod(keyPath, 0o600);
 
-    const remoteCmd = buildRemoteCommand(params);
+    if (ctx.log) {
+      ctx.log(`[docker_remote] Connecting to ${params.user}@${params.host}:${port} via SSH`);
+      ctx.log(`[docker_remote] Image: ${params.image}`);
+      ctx.log(`[docker_remote] Container name: ${containerName}`);
+      ctx.log(`[docker_remote] Timeout: ${timeout}ms`);
+    }
+
+    const { remoteCmd, dockerRunCommand } = buildRemoteCommand(params, containerName, ctx.log);
+    
+    if (ctx.log) {
+      ctx.log(`[docker_remote] Docker run command: ${dockerRunCommand}`);
+    }
+
     const args = [
       "-i",
       keyPath,
@@ -254,24 +276,32 @@ export async function run(
             chunks.push(value);
             if (ctx.log) {
               for (const line of value.split("\n")) {
-                if (line) ctx.log(prefix + line);
+                if (line && !line.startsWith("__HW_META__")) {
+                  ctx.log(prefix + line);
+                }
               }
             }
           }
-        } catch {
-          // Ignore read errors if aborted
+        } catch (err) {
+          if (ctx.log && !killed) {
+            ctx.log(`[docker_remote] Error reading stream: ${err instanceof Error ? err.message : String(err)}`);
+          }
         } finally {
           reader.releaseLock();
         }
       };
 
       const streamPromise = Promise.all([
-        streamOutput(process.stdout, stdoutChunks),
-        streamOutput(process.stderr, stderrChunks, "[ERR] ")
+        streamOutput(process.stdout, stdoutChunks, "[docker_remote] "),
+        streamOutput(process.stderr, stderrChunks, "[docker_remote] [ERR] ")
       ]);
 
       const status = await process.status;
-      await streamPromise.catch(() => {});
+      await streamPromise.catch((err) => {
+        if (ctx.log) {
+          ctx.log(`[docker_remote] Error during stream processing: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      });
 
       clearTimeout(timeoutId);
       if (ctx.signal) ctx.signal.removeEventListener("abort", abortHandler);
@@ -283,6 +313,17 @@ export async function run(
       const stdout = stdoutChunks.join("");
       const stderr = stderrChunks.join("");
 
+      if (ctx.log) {
+        if (status.code !== 0) {
+          ctx.log(`[docker_remote] Command failed with exit code: ${status.code}`);
+          if (stderr) {
+            ctx.log(`[docker_remote] Error output: ${stderr}`);
+          }
+        } else {
+          ctx.log(`[docker_remote] Command completed successfully`);
+        }
+      }
+
       const meta = parseMeta(stdout);
 
       return {
@@ -293,6 +334,15 @@ export async function run(
         newImageId: meta.newId || null,
         changed: !!(meta.prev || meta.newId) ? meta.prev !== meta.newId : status.code === 0
       };
+    } catch (err) {
+      if (ctx.log) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        ctx.log(`[docker_remote] Error during execution: ${errorMsg}`);
+        if (err instanceof Error && err.stack) {
+          ctx.log(`[docker_remote] Stack trace: ${err.stack}`);
+        }
+      }
+      throw err;
     } finally {
       clearTimeout(timeoutId);
       if (ctx.signal) {
@@ -308,14 +358,19 @@ export async function run(
   }
 }
 
-function buildRemoteCommand(params: DockerRemoteParams): string {
+function buildRemoteCommand(
+  params: DockerRemoteParams,
+  containerName: string,
+  log?: (msg: string) => void
+): { remoteCmd: string; dockerRunCommand: string } {
   const sudo = params.sudo ? "sudo " : "";
   const imageArg = shEscape(params.image);
+  const containerNameEscaped = shEscape(containerName);
 
   const runArgs: string[] = [];
   runArgs.push(`${sudo}docker run`);
   if (params.detach !== false) runArgs.push("-d");
-  if (params.name) runArgs.push("--name", shEscape(params.name));
+  runArgs.push("--name", containerNameEscaped);
   if (params.restart) runArgs.push("--restart", shEscape(params.restart));
 
   if (Array.isArray(params.ports)) {
@@ -325,8 +380,36 @@ function buildRemoteCommand(params: DockerRemoteParams): string {
   }
 
   if (params.env) {
-    for (const [key, value] of Object.entries(params.env)) {
-      runArgs.push("-e", shEscape(`${key}=${value}`));
+    // Handle both object and string (JSON) formats
+    let envObj: Record<string, string>;
+    const envType = typeof params.env;
+    
+    if (envType === "string") {
+      try {
+        envObj = JSON.parse(params.env);
+        if (log) log(`[docker_remote] Parsed env from JSON string: ${Object.keys(envObj).length} variables`);
+      } catch (e) {
+        throw new Error(`Invalid env format: expected object or JSON string, got: ${params.env.substring(0, 100)}`);
+      }
+    } else if (envType === "object" && params.env !== null && !Array.isArray(params.env)) {
+      envObj = params.env;
+      if (log) log(`[docker_remote] Using env object: ${Object.keys(envObj).length} variables`);
+    } else {
+      throw new Error(`Invalid env format: expected object, got ${envType} (${Array.isArray(params.env) ? "array" : String(params.env)})`);
+    }
+    
+    // Ensure we're iterating over an object, not a string
+    if (typeof envObj === "object" && envObj !== null && !Array.isArray(envObj)) {
+      const entries = Object.entries(envObj);
+      if (log) log(`[docker_remote] Processing ${entries.length} environment variables`);
+      for (const [key, value] of entries) {
+        if (typeof key === "string" && key.length > 0) {
+          const valueStr = value !== null && value !== undefined ? String(value) : "";
+          runArgs.push("-e", shEscape(`${key}=${valueStr}`));
+        }
+      }
+    } else {
+      throw new Error(`Invalid env object after processing: got ${typeof envObj}`);
     }
   }
 
@@ -343,21 +426,51 @@ function buildRemoteCommand(params: DockerRemoteParams): string {
   runArgs.push(imageArg);
   if (params.cmd) runArgs.push(params.cmd);
 
-  const lines: string[] = [];
-  lines.push("set -euo pipefail");
-  lines.push(`if ! command -v docker >/dev/null 2>&1; then echo "Docker not found" >&2; exit 127; fi`);
-  lines.push(`prev_id=$(${sudo}docker image inspect --format '{{.Id}}' ${imageArg} 2>/dev/null || true)`);
-  lines.push(`${sudo}docker pull ${imageArg}`);
-  lines.push(`new_id=$(${sudo}docker image inspect --format '{{.Id}}' ${imageArg} 2>/dev/null || true)`);
+  // Build the docker run command for logging (readable format)
+  const dockerRunCommand = runArgs.join(" ");
 
-  if (params.name) {
-    lines.push(`${sudo}docker rm -f ${shEscape(params.name)} >/dev/null 2>&1 || true`);
-  }
+  // Build bash script with proper multiline syntax
+  // Use heredoc or proper command grouping to handle multiline if statements
+  const scriptParts: string[] = [];
+  
+  scriptParts.push("set -euo pipefail");
+  scriptParts.push(`echo "[docker_remote] Checking Docker availability..."`);
+  scriptParts.push(`if ! command -v docker >/dev/null 2>&1; then echo "[docker_remote] ERROR: Docker not found" >&2; exit 127; fi`);
+  scriptParts.push(`echo "[docker_remote] Docker found, inspecting previous image ID..."`);
+  scriptParts.push(`prev_id=$(${sudo}docker image inspect --format '{{.Id}}' ${imageArg} 2>/dev/null || echo "")`);
+  scriptParts.push(`echo "[docker_remote] Pulling image: ${params.image}"`);
+  scriptParts.push(`${sudo}docker pull ${imageArg}`);
+  scriptParts.push(`echo "[docker_remote] Image pulled, inspecting new image ID..."`);
+  scriptParts.push(`new_id=$(${sudo}docker image inspect --format '{{.Id}}' ${imageArg} 2>/dev/null || echo "")`);
+  scriptParts.push(`echo "[docker_remote] Checking if container ${containerName} exists..."`);
+  
+  // Use proper escaping for container name in filter - escape special regex chars
+  const containerNameForFilter = containerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  scriptParts.push(`container_exists=$(${sudo}docker ps -a --filter "name=^${containerNameForFilter}$" --format '{{.Names}}' 2>/dev/null || echo "")`);
+  
+  // Use proper bash syntax for if/else - wrap in braces and use semicolons
+  scriptParts.push(`if [ -n "$container_exists" ]; then echo "[docker_remote] Container ${containerName} exists, stopping it..."; ${sudo}docker stop ${containerNameEscaped} >/dev/null 2>&1 || true; echo "[docker_remote] Removing container ${containerName}..."; ${sudo}docker rm -f ${containerNameEscaped} >/dev/null 2>&1 || true; echo "[docker_remote] Container ${containerName} removed"; else echo "[docker_remote] Container ${containerName} does not exist, proceeding with creation"; fi`);
+  
+  scriptParts.push(`echo "[docker_remote] Starting new container: ${containerName}"`);
+  scriptParts.push(runArgs.join(" "));
+  scriptParts.push(`echo "[docker_remote] Container ${containerName} started successfully"`);
+  scriptParts.push(`echo "__HW_META__ prev=$prev_id new=$new_id"`);
 
-  lines.push(runArgs.join(" "));
-  lines.push(`echo "__HW_META__ prev=$prev_id new=$new_id"`);
+  // Join with && for proper error handling
+  const remoteCmd = scriptParts.join(" && ");
 
-  return lines.join(" && ");
+  return {
+    remoteCmd,
+    dockerRunCommand
+  };
+}
+
+function extractImageBaseName(image: string): string {
+  // Удаляем тег (все после последнего :)
+  let base = image.split(':')[0];
+  // Удаляем registry и namespace (оставляем только последнюю часть после /)
+  const parts = base.split('/');
+  return parts[parts.length - 1];
 }
 
 function shEscape(value: string): string {
