@@ -5,7 +5,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   InputAdornment, IconButton, Snackbar, Alert, LinearProgress
 } from "@mui/material";
-import { Save, Add, Delete, VpnKey, ContentCopy, Check, Visibility, VisibilityOff } from "@mui/icons-material";
+import { Save, Add, Delete, VpnKey, ContentCopy, Check, Visibility, VisibilityOff, Refresh, Warning } from "@mui/icons-material";
 import { getVariables, saveVariables, generateSSHKey, type VariablesConfig } from "../lib/api";
 
 export default function Variables() {
@@ -14,6 +14,7 @@ export default function Variables() {
   const [newEnvName, setNewEnvName] = useState("");
   const [newKeyName, setNewKeyName] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [regeneratingKey, setRegeneratingKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"global" | "environments" | "ssh">("global");
   
@@ -23,6 +24,23 @@ export default function Variables() {
   // Dialog state for adding variables
   const [addVarDialog, setAddVarDialog] = useState<{ open: boolean; type: "global" | "env"; envName?: string }>({ open: false, type: "global" });
   const [newVarName, setNewVarName] = useState("");
+  
+  // Confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+    confirmColor?: "primary" | "error" | "warning";
+  }>({
+    open: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+    confirmText: "Confirm",
+    confirmColor: "primary",
+  });
   
   // Snackbar state for notifications
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({ 
@@ -170,11 +188,20 @@ export default function Variables() {
   };
 
   const removeGlobal = (key: string) => {
-    if (!confirm("Delete variable?")) return;
-    setConfig(prev => {
-      const next = { ...prev.global };
-      delete next[key];
-      return { ...prev, global: next };
+    setConfirmDialog({
+      open: true,
+      title: "Delete Variable",
+      message: `Are you sure you want to delete the variable "${key}"?`,
+      onConfirm: () => {
+        setConfig(prev => {
+          const next = { ...prev.global };
+          delete next[key];
+          return { ...prev, global: next };
+        });
+        setConfirmDialog(prev => ({ ...prev, open: false }));
+      },
+      confirmText: "Delete",
+      confirmColor: "error",
     });
   };
 
@@ -188,11 +215,20 @@ export default function Variables() {
   };
 
   const removeEnv = (env: string) => {
-    if (!confirm(`Delete environment '${env}'?`)) return;
-    setConfig(prev => {
-      const next = { ...prev.environments };
-      delete next[env];
-      return { ...prev, environments: next };
+    setConfirmDialog({
+      open: true,
+      title: "Delete Environment",
+      message: `Are you sure you want to delete the environment "${env}"? All variables in this environment will be lost.`,
+      onConfirm: () => {
+        setConfig(prev => {
+          const next = { ...prev.environments };
+          delete next[env];
+          return { ...prev, environments: next };
+        });
+        setConfirmDialog(prev => ({ ...prev, open: false }));
+      },
+      confirmText: "Delete",
+      confirmColor: "error",
     });
   };
 
@@ -243,11 +279,47 @@ export default function Variables() {
   };
 
   const removeSSHKey = (name: string) => {
-    if (!confirm(`Delete SSH key '${name}'?`)) return;
-    setConfig(prev => {
-      const next = { ...(prev.sshKeys || {}) };
-      delete next[name];
-      return { ...prev, sshKeys: next };
+    setConfirmDialog({
+      open: true,
+      title: "Delete SSH Key",
+      message: `Are you sure you want to delete the SSH key "${name}"? This action cannot be undone.`,
+      onConfirm: () => {
+        setConfig(prev => {
+          const next = { ...(prev.sshKeys || {}) };
+          delete next[name];
+          return { ...prev, sshKeys: next };
+        });
+        setConfirmDialog(prev => ({ ...prev, open: false }));
+      },
+      confirmText: "Delete",
+      confirmColor: "error",
+    });
+  };
+
+  const handleRegenerateKey = (name: string) => {
+    setConfirmDialog({
+      open: true,
+      title: "Regenerate SSH Key",
+      message: `Are you sure you want to regenerate the SSH key "${name}"? This will invalidate the old key and you'll need to update the public key on all servers that use this key.`,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, open: false }));
+        setRegeneratingKey(name);
+        try {
+          const keyPair = await generateSSHKey(name);
+          // Update the key pair in config (same name, new keys)
+          setConfig(prev => ({
+            ...prev,
+            sshKeys: { ...(prev.sshKeys || {}), [name]: keyPair }
+          }));
+          setSnackbar({ open: true, message: `SSH key "${name}" regenerated successfully. Update the public key on all servers.`, severity: "success" });
+        } catch (e) {
+          setSnackbar({ open: true, message: "Error regenerating SSH key: " + e, severity: "error" });
+        } finally {
+          setRegeneratingKey(null);
+        }
+      },
+      confirmText: "Regenerate",
+      confirmColor: "warning",
     });
   };
 
@@ -495,9 +567,20 @@ export default function Variables() {
                   <Typography variant="subtitle1" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
                     {name}
                   </Typography>
-                  <Button color="error" size="small" onClick={() => removeSSHKey(name)}>
-                    <Delete fontSize="small" />
-                  </Button>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button 
+                      color="primary" 
+                      size="small" 
+                      onClick={() => handleRegenerateKey(name)}
+                      disabled={regeneratingKey === name || generating}
+                      startIcon={regeneratingKey === name ? <CircularProgress size={14} /> : <Refresh />}
+                    >
+                      {regeneratingKey === name ? "Regenerating..." : "Regenerate"}
+                    </Button>
+                    <Button color="error" size="small" onClick={() => removeSSHKey(name)}>
+                      <Delete fontSize="small" />
+                    </Button>
+                  </Box>
                 </Box>
                 
                 {/* Public Key - copyable */}
@@ -639,6 +722,44 @@ export default function Variables() {
           <Button onClick={handleCloseAddVarDialog}>Cancel</Button>
           <Button onClick={handleAddVar} variant="contained" disabled={!newVarName.trim()}>
             Add
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirmation Dialog */}
+      <Dialog 
+        open={confirmDialog.open} 
+        onClose={() => setConfirmDialog(prev => ({ ...prev, open: false }))} 
+        maxWidth="sm" 
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+          {confirmDialog.confirmColor === "error" && <Delete color="error" sx={{ fontSize: '1.5rem' }} />}
+          {confirmDialog.confirmColor === "warning" && <Warning color="warning" sx={{ fontSize: '1.5rem' }} />}
+          {confirmDialog.confirmColor === "primary" && <VpnKey color="primary" sx={{ fontSize: '1.5rem' }} />}
+          <Typography variant="h6" component="span">
+            {confirmDialog.title}
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Typography variant="body1" color="text.secondary">
+            {confirmDialog.message}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, pt: 1 }}>
+          <Button 
+            onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}
+            variant="outlined"
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={confirmDialog.onConfirm} 
+            variant="contained" 
+            color={confirmDialog.confirmColor}
+            autoFocus
+          >
+            {confirmDialog.confirmText}
           </Button>
         </DialogActions>
       </Dialog>
