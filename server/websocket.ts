@@ -167,3 +167,34 @@ export async function handleWebSocket(req: Request): Promise<Response> {
 export function getConnectedClientsCount(): number {
   return wsClients.size;
 }
+
+/**
+ * Closes all WebSocket connections (used during graceful shutdown)
+ * Returns the number of connections closed
+ */
+export function closeAllWebSocketConnections(): number {
+  const count = wsClients.size;
+  
+  // Stop system metrics broadcast
+  stopSystemMetricsBroadcast();
+  
+  // Close all connections
+  for (const client of wsClients) {
+    try {
+      if (client.readyState === WebSocket.OPEN || client.readyState === WebSocket.CONNECTING) {
+        client.close(1001, "Server shutting down");
+      }
+      cleanupSocket(client);
+    } catch (e) {
+      console.error("[WS] Error closing connection:", e);
+    }
+  }
+  
+  wsClients.clear();
+  
+  if (count > 0) {
+    console.log(`[WS] Closed ${count} WebSocket connection(s)`);
+  }
+  
+  return count;
+}

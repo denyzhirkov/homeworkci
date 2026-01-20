@@ -11,7 +11,7 @@ import {
 export interface LogEntry {
   pipelineId: string;
   runId: string;
-  status: "success" | "fail" | "running";
+  status: "success" | "fail" | "running" | "cancelled" | "interrupted";
   duration?: number;
   startedAt?: number;
 }
@@ -37,7 +37,7 @@ export function getRunHistory(pipelineId: string): LogEntry[] {
   return runs.map((r: RunRecord) => ({
     pipelineId: r.pipeline_id,
     runId: r.run_id,
-    status: r.status as "success" | "fail" | "running",
+    status: r.status as "success" | "fail" | "running" | "cancelled" | "interrupted",
     duration: r.duration_ms ?? undefined,
     startedAt: r.started_at,
   }));

@@ -153,7 +153,7 @@ export interface OverviewStats {
 export interface LogEntry {
   pipelineId: string;
   runId: string;
-  status: "success" | "fail" | "running" | "cancelled";
+  status: "success" | "fail" | "running" | "cancelled" | "interrupted";
   duration?: number;
   startedAt?: number;
 }

@@ -177,7 +177,7 @@ export function getPipelineStats(pipelineId: string): PipelineStats {
     SELECT 
       COUNT(*) as total_runs,
       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_runs,
-      SUM(CASE WHEN status = 'fail' THEN 1 ELSE 0 END) as failed_runs,
+      SUM(CASE WHEN status IN ('fail', 'cancelled', 'interrupted') THEN 1 ELSE 0 END) as failed_runs,
       AVG(CASE WHEN status != 'running' THEN duration_ms END) as avg_duration_ms,
       MAX(started_at) as last_run_at
     FROM runs
@@ -223,7 +223,7 @@ export function getOverviewStats(): OverviewStats {
       COUNT(DISTINCT pipeline_id) as total_pipelines_run,
       COUNT(*) as total_runs,
       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_runs,
-      SUM(CASE WHEN status = 'fail' THEN 1 ELSE 0 END) as failed_runs,
+      SUM(CASE WHEN status IN ('fail', 'cancelled', 'interrupted') THEN 1 ELSE 0 END) as failed_runs,
       SUM(CASE WHEN started_at >= ? THEN 1 ELSE 0 END) as runs_today,
       SUM(CASE WHEN started_at >= ? THEN 1 ELSE 0 END) as runs_this_week
     FROM runs
@@ -248,6 +248,34 @@ export function getOverviewStats(): OverviewStats {
     runs_today: row.runs_today || 0,
     runs_this_week: row.runs_this_week || 0,
   };
+}
+
+// --- Recovery ---
+
+/**
+ * Marks all running pipelines as interrupted (called on server startup)
+ * This handles cases where the server crashed or was forcefully stopped
+ */
+export function recoverInterruptedRuns(): number {
+  const stmt = db.prepare(`
+    UPDATE runs 
+    SET status = 'interrupted', 
+        finished_at = ?,
+        duration_ms = CASE 
+          WHEN started_at > 0 THEN ? - started_at 
+          ELSE NULL 
+        END
+    WHERE status = 'running'
+  `);
+  const now = Date.now();
+  stmt.run(now, now);
+  const affected = db.changes;
+  
+  if (affected > 0) {
+    console.log(`[DB] Recovered ${affected} interrupted pipeline run(s)`);
+  }
+  
+  return affected;
 }
 
 // Close database on process exit

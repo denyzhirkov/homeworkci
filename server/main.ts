@@ -7,9 +7,10 @@ import { cors } from "hono/cors";
 import { Scheduler } from "./scheduler.ts";
 import { config, logConfig } from "./config.ts";
 import { initVersion, getVersionSync } from "./utils/index.ts";
-import { cleanupOldSandboxes } from "./engine.ts";
-import { handleWebSocket } from "./websocket.ts";
+import { cleanupOldSandboxes, stopAllPipelines } from "./engine.ts";
+import { handleWebSocket, closeAllWebSocketConnections } from "./websocket.ts";
 import { pipelines, modules, variables, stats, settings, updates, handleSandboxCleanup } from "./routes/index.ts";
+import { recoverInterruptedRuns } from "./db.ts";
 
 const app = new Hono();
 
@@ -60,9 +61,13 @@ if (import.meta.main) {
   // Log configuration
   logConfig();
 
+  // Recovery: Mark all running pipelines as interrupted (from previous crash/stop)
+  const interruptedCount = recoverInterruptedRuns();
+
   // Start scheduler if enabled
+  let scheduler: Scheduler | null = null;
   if (config.enableScheduler) {
-    const scheduler = new Scheduler();
+    scheduler = new Scheduler();
     scheduler.start();
   }
 
@@ -72,6 +77,47 @@ if (import.meta.main) {
       console.log(`[Startup] Cleaned up ${cleaned} old sandbox directories`);
     }
   });
+
+  // Graceful shutdown handler
+  let isShuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (isShuttingDown) {
+      console.log(`[Shutdown] Received ${signal} again, forcing exit...`);
+      Deno.exit(1);
+    }
+    
+    isShuttingDown = true;
+    console.log(`[Shutdown] Received ${signal}, shutting down gracefully...`);
+
+    try {
+      // 1. Stop accepting new requests (server will stop after current requests)
+      console.log("[Shutdown] Stopping scheduler...");
+      if (scheduler) {
+        scheduler.stop();
+      }
+
+      // 2. Stop all running pipelines
+      console.log("[Shutdown] Stopping active pipelines...");
+      const stoppedCount = await stopAllPipelines();
+
+      // 3. Close all WebSocket connections
+      console.log("[Shutdown] Closing WebSocket connections...");
+      const closedConnections = closeAllWebSocketConnections();
+
+      // 4. Give a moment for cleanup to complete
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      console.log(`[Shutdown] Graceful shutdown complete (stopped ${stoppedCount} pipeline(s), closed ${closedConnections} connection(s))`);
+      Deno.exit(0);
+    } catch (e) {
+      console.error("[Shutdown] Error during shutdown:", e);
+      Deno.exit(1);
+    }
+  };
+
+  // Register signal handlers for graceful shutdown
+  Deno.addSignalListener("SIGINT", () => shutdown("SIGINT"));
+  Deno.addSignalListener("SIGTERM", () => shutdown("SIGTERM"));
 
   console.log(`Starting HomeworkCI server on http://${config.host}:${config.port}`);
   Deno.serve({ port: config.port, hostname: config.host }, app.fetch);

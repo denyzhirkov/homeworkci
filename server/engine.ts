@@ -32,6 +32,32 @@ export function getActivePipelines(): string[] {
   return Array.from(runningPipelines.keys());
 }
 
+/**
+ * Stops all currently running pipelines (used during graceful shutdown)
+ * Returns the number of pipelines stopped
+ */
+export async function stopAllPipelines(): Promise<number> {
+  const activeIds = Array.from(runningPipelines.keys());
+  let stopped = 0;
+  
+  console.log(`[Engine] Stopping ${activeIds.length} active pipeline(s)...`);
+  
+  // Stop all pipelines in parallel
+  const stopPromises = activeIds.map(async (id) => {
+    try {
+      const result = await stopPipeline(id);
+      if (result) stopped++;
+    } catch (e) {
+      console.error(`[Engine] Failed to stop pipeline ${id}:`, e);
+    }
+  });
+  
+  await Promise.all(stopPromises);
+  
+  console.log(`[Engine] Stopped ${stopped} pipeline(s)`);
+  return stopped;
+}
+
 export async function stopPipeline(id: string): Promise<boolean> {
   const running = runningPipelines.get(id);
   if (!running) return false;
