@@ -17,6 +17,7 @@ import {
 import { getRunHistory, getRunLogWithStatus } from "../logger.ts";
 import { getPipelineStats, getRunByRunId, getStepsByRunId } from "../db.ts";
 import { pubsub } from "../pubsub.ts";
+import { getQueueStats, clearQueue } from "../queue.ts";
 
 const app = new Hono();
 
@@ -24,11 +25,15 @@ const app = new Hono();
 app.get("/", async (c) => {
   const pipelines = await listPipelines();
   const active = new Set(getActivePipelines());
-  const enhanced = pipelines.map((p) => ({
-    ...p,
-    isRunning: active.has(p.id),
-    isDemo: isDemoPipeline(p.id),
-  }));
+  const enhanced = pipelines.map((p) => {
+    const queueStats = getQueueStats(p.id);
+    return {
+      ...p,
+      isRunning: active.has(p.id),
+      isDemo: isDemoPipeline(p.id),
+      queue: queueStats,
+    };
+  });
   return c.json(enhanced);
 });
 
@@ -38,7 +43,8 @@ app.get("/:id", async (c) => {
   const p = await loadPipeline(id);
   if (!p) return c.json({ error: "Not found" }, 404);
   const active = getActivePipelines();
-  return c.json({ ...p, isDemo: isDemoPipeline(id), isRunning: active.includes(id) });
+  const queueStats = getQueueStats(id);
+  return c.json({ ...p, isDemo: isDemoPipeline(id), isRunning: active.includes(id), queue: queueStats });
 });
 
 // Create new pipeline
@@ -65,7 +71,10 @@ app.post("/:id", async (c) => {
 // Delete pipeline
 app.delete("/:id", async (c) => {
   try {
-    await deletePipeline(c.req.param("id"));
+    const id = c.req.param("id");
+    await deletePipeline(id);
+    // Clear queue for deleted pipeline
+    clearQueue(id, "Pipeline deleted");
     pubsub.publish({ type: "pipelines:changed" });
     return c.json({ success: true });
   } catch (e) {

@@ -22,6 +22,9 @@ export const config = {
 
   // --- Features ---
   enableScheduler: getEnvBool("ENABLE_SCHEDULER", true),
+  
+  // --- Pipeline Queue ---
+  maxConcurrentRunsPerPipeline: getEnvInt("MAX_CONCURRENT_RUNS_PER_PIPELINE", 1),
 
   // --- Docker Runner ---
   dockerEnabled: getEnvBool("DOCKER_ENABLED", false),
@@ -49,6 +52,7 @@ export function logConfig(): void {
   console.log(`  HOST: ${config.host}`);
   console.log(`  SANDBOX_MAX_AGE: ${config.sandboxMaxAgeMs / 1000 / 60 / 60}h`);
   console.log(`  ENABLE_SCHEDULER: ${config.enableScheduler}`);
+  console.log(`  MAX_CONCURRENT_RUNS_PER_PIPELINE: ${config.maxConcurrentRunsPerPipeline}`);
   console.log(`  DOCKER_ENABLED: ${config.dockerEnabled}`);
   if (config.dockerEnabled) {
     console.log(`  DOCKER_DEFAULT_IMAGE: ${config.dockerDefaultImage}`);

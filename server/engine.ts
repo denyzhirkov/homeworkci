@@ -12,6 +12,13 @@ import { interpolate } from "./interpolation.ts";
 import { pubsub } from "./pubsub.ts";
 import { finishRun } from "./db.ts";
 import { sanitizeLogMessage, validatePipelineId } from "./utils/index.ts";
+import {
+  canRunImmediately,
+  enqueuePipeline,
+  incrementRunningCount,
+  decrementRunningCount,
+  clearQueue,
+} from "./queue.ts";
 import type { PipelineStep, PipelineContext, RunningPipeline, StepItem } from "./types/index.ts";
 
 // Forbidden keys to prevent prototype pollution (same as in interpolation.ts)
@@ -23,52 +30,66 @@ export { cleanupOldSandboxes } from "./sandbox.ts";
 
 // --- Running pipelines tracking ---
 
+// Map: pipelineId:runId -> RunningPipeline
+// Using composite key to support multiple concurrent runs of the same pipeline
 const runningPipelines = new Map<string, RunningPipeline>();
 
 // Maximum log buffer size to prevent memory exhaustion on long-running pipelines
 const MAX_LOG_BUFFER_SIZE = 10 * 1024 * 1024; // 10MB
 
 export function getActivePipelines(): string[] {
-  return Array.from(runningPipelines.keys());
+  // Extract unique pipeline IDs from composite keys
+  const pipelineIds = new Set<string>();
+  for (const key of runningPipelines.keys()) {
+    const pipelineId = key.split(":")[0]; // Extract pipeline ID from "id:runId"
+    pipelineIds.add(pipelineId);
+  }
+  return Array.from(pipelineIds);
 }
 
 /**
  * Stops all currently running pipelines (used during graceful shutdown)
- * Returns the number of pipelines stopped
+ * Returns the number of pipeline runs stopped
  */
 export async function stopAllPipelines(): Promise<number> {
-  const activeIds = Array.from(runningPipelines.keys());
+  const activeKeys = Array.from(runningPipelines.keys());
   let stopped = 0;
   
-  console.log(`[Engine] Stopping ${activeIds.length} active pipeline(s)...`);
+  console.log(`[Engine] Stopping ${activeKeys.length} active pipeline run(s)...`);
   
-  // Stop all pipelines in parallel
-  const stopPromises = activeIds.map(async (id) => {
+  // Stop all pipeline runs in parallel
+  const stopPromises = activeKeys.map(async (key) => {
     try {
-      const result = await stopPipeline(id);
+      const pipelineId = key.split(":")[0];
+      const result = await stopPipelineRun(key);
       if (result) stopped++;
     } catch (e) {
-      console.error(`[Engine] Failed to stop pipeline ${id}:`, e);
+      console.error(`[Engine] Failed to stop pipeline run ${key}:`, e);
     }
   });
   
   await Promise.all(stopPromises);
   
-  console.log(`[Engine] Stopped ${stopped} pipeline(s)`);
+  console.log(`[Engine] Stopped ${stopped} pipeline run(s)`);
   return stopped;
 }
 
-export async function stopPipeline(id: string): Promise<boolean> {
-  const running = runningPipelines.get(id);
+/**
+ * Stop a specific pipeline run by composite key (pipelineId:runId)
+ */
+async function stopPipelineRun(key: string): Promise<boolean> {
+  const running = runningPipelines.get(key);
   if (!running) return false;
+
+  const [pipelineId] = key.split(":");
 
   running.controller.abort();
 
   // Kill any Docker containers for this run
   if (config.dockerEnabled) {
-    const killed = await killContainersForRun(id, running.runId);
+    const killed = await killContainersForRun(pipelineId, running.runId);
     if (killed > 0) {
-      console.log(`[Docker] Killed ${killed} container(s) for pipeline ${id}`);
+      console.log(`[Docker] Killed ${killed} container(s) for pipeline ${pipelineId}`);
     }
   }
 
@@ -89,9 +110,45 @@ export async function stopPipeline(id: string): Promise<boolean> {
   const logContent = running.logBuffer + `\n[${new Date().toISOString()}] Pipeline stopped by user.\n`;
   finishRun(running.dbRunId, "cancelled", logContent, duration);
 
-  runningPipelines.delete(id);
-  pubsub.publish({ type: "end", pipelineId: id, payload: { runId: running.runId, success: false } });
+  runningPipelines.delete(key);
+  
+  // Decrement queue counter and process queue
+  decrementRunningCount(pipelineId);
+  
+  pubsub.publish({ type: "end", pipelineId, payload: { runId: running.runId, success: false } });
   return true;
+}
+
+/**
+ * Stop all runs of a pipeline (or a specific run if runId provided)
+ * If runId is not provided, stops the most recent run
+ */
+export async function stopPipeline(id: string, runId?: string): Promise<boolean> {
+  if (runId) {
+    // Stop specific run
+    const key = `${id}:${runId}`;
+    return await stopPipelineRun(key);
+  } else {
+    // Stop most recent run (for backward compatibility)
+    // Find the most recent run for this pipeline
+    let mostRecentKey: string | null = null;
+    let mostRecentTime = 0;
+    
+    for (const [key, running] of runningPipelines) {
+      if (key.startsWith(`${id}:`)) {
+        if (running.startTime > mostRecentTime) {
+          mostRecentTime = running.startTime;
+          mostRecentKey = key;
+        }
+      }
+    }
+    
+    if (mostRecentKey) {
+      return await stopPipelineRun(mostRecentKey);
+    }
+    
+    return false;
+  }
 }
 
 // --- Pipeline context creation ---
@@ -227,14 +284,28 @@ export async function runPipeline(
   _parentPipelineId?: string,
   _parentRunId?: string
 ) {
-  if (runningPipelines.has(id)) {
-    throw new Error(`Pipeline ${id} is already running`);
+  // Validate pipeline ID first
+  validatePipelineId(id);
+
+  // Check if pipeline can run immediately or needs to be queued
+  if (!canRunImmediately(id)) {
+    console.log(`[Engine] Pipeline ${id} is at max concurrent limit, queuing...`);
+    // Wait in queue until a slot becomes available
+    await enqueuePipeline(id, runtimeInputs);
+    // When promise resolves, we can proceed with execution
   }
 
   const pipeline = await loadPipeline(id);
   if (!pipeline) {
+    // If pipeline not found after queuing, we need to process queue
+    // (someone was waiting, but pipeline doesn't exist)
+    decrementRunningCount(id);
     throw new Error(`Pipeline ${id} not found`);
   }
+
+  // Increment running count (we're about to start execution)
+  // This must be after pipeline is loaded successfully
+  incrementRunningCount(id);
 
   console.log(`[Engine] Starting pipeline: ${pipeline.name} (${id})`);
 
@@ -250,9 +321,6 @@ export async function runPipeline(
   if (runtimeInputs) {
     Object.assign(inputs, runtimeInputs);
   }
-
-  // Validate pipeline ID
-  validatePipelineId(id);
 
   const controller = new AbortController();
   const startTime = Date.now();
@@ -273,7 +341,9 @@ export async function runPipeline(
     sandboxPath,
     keepWorkDir: pipeline.keepWorkDir ?? false,
   };
-  runningPipelines.set(id, runningInfo);
+  // Use composite key to support multiple concurrent runs
+  const pipelineRunKey = `${id}:${runId}`;
+  runningPipelines.set(pipelineRunKey, runningInfo);
 
   const totalSteps = countTotalSteps(pipeline.steps);
   pubsub.publish({ type: "start", pipelineId: id, payload: { runId, totalSteps } });
@@ -567,7 +637,12 @@ export async function runPipeline(
     return { success, duration, runId, workDir: pipeline.keepWorkDir ? sandboxPath : null };
   } finally {
     // Guarantee cleanup of runningPipelines Map to prevent memory leaks
-    runningPipelines.delete(id);
+    const pipelineRunKey = `${id}:${runId}`;
+    runningPipelines.delete(pipelineRunKey);
+    
+    // Decrement queue counter and process next in queue
+    // This will only decrement if incrementRunningCount was called (it checks count > 0)
+    decrementRunningCount(id);
   }
 }
 
