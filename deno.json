@@ -1,6 +1,6 @@
 {
   "name": "@homeworkci/server",
-  "version": "1.16.2",
+  "version": "1.16.3",
   "exports": "./server/main.ts",
   "tasks": {
     "start": "deno run -A --watch server/main.ts",
