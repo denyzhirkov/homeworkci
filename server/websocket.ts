@@ -43,10 +43,10 @@ async function broadcastSystemMetrics(): Promise<void> {
 // Start system metrics broadcasting when first client connects
 function startSystemMetricsBroadcast(): void {
   if (systemMetricsInterval !== null) return;
-  
+
   // Send immediately on first connection
   broadcastSystemMetrics();
-  
+
   systemMetricsInterval = setInterval(() => {
     broadcastSystemMetrics();
   }, SYSTEM_METRICS_INTERVAL);
@@ -68,7 +68,7 @@ function cleanupSocket(socket: WebSocket): void {
     heartbeatIntervals.delete(socket);
   }
   wsClients.delete(socket);
-  
+
   // Stop metrics broadcast if no clients left
   if (wsClients.size === 0) {
     stopSystemMetricsBroadcast();
@@ -105,7 +105,7 @@ export async function handleWebSocket(req: Request): Promise<Response> {
   socket.onopen = async () => {
     console.log("[WS] Client connected");
     wsClients.add(socket);
-    
+
     // Start system metrics broadcast
     startSystemMetricsBroadcast();
 
@@ -174,10 +174,10 @@ export function getConnectedClientsCount(): number {
  */
 export function closeAllWebSocketConnections(): number {
   const count = wsClients.size;
-  
+
   // Stop system metrics broadcast
   stopSystemMetricsBroadcast();
-  
+
   // Close all connections
   for (const client of wsClients) {
     try {
@@ -189,12 +189,12 @@ export function closeAllWebSocketConnections(): number {
       console.error("[WS] Error closing connection:", e);
     }
   }
-  
+
   wsClients.clear();
-  
+
   if (count > 0) {
     console.log(`[WS] Closed ${count} WebSocket connection(s)`);
   }
-  
+
   return count;
 }

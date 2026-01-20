@@ -85,7 +85,7 @@ if (import.meta.main) {
       console.log(`[Shutdown] Received ${signal} again, forcing exit...`);
       Deno.exit(1);
     }
-    
+
     isShuttingDown = true;
     console.log(`[Shutdown] Received ${signal}, shutting down gracefully...`);
 

@@ -54,9 +54,9 @@ export function getActivePipelines(): string[] {
 export async function stopAllPipelines(): Promise<number> {
   const activeKeys = Array.from(runningPipelines.keys());
   let stopped = 0;
-  
+
   console.log(`[Engine] Stopping ${activeKeys.length} active pipeline run(s)...`);
-  
+
   // Stop all pipeline runs in parallel
   const stopPromises = activeKeys.map(async (key) => {
     try {
@@ -67,9 +67,9 @@ export async function stopAllPipelines(): Promise<number> {
       console.error(`[Engine] Failed to stop pipeline run ${key}:`, e);
     }
   });
-  
+
   await Promise.all(stopPromises);
-  
+
   console.log(`[Engine] Stopped ${stopped} pipeline run(s)`);
   return stopped;
 }
@@ -111,10 +111,10 @@ async function stopPipelineRun(key: string): Promise<boolean> {
   finishRun(running.dbRunId, "cancelled", logContent, duration);
 
   runningPipelines.delete(key);
-  
+
   // Decrement queue counter and process queue
   decrementRunningCount(pipelineId);
-  
+
   pubsub.publish({ type: "end", pipelineId, payload: { runId: running.runId, success: false } });
   return true;
 }
@@ -133,7 +133,7 @@ export async function stopPipeline(id: string, runId?: string): Promise<boolean>
     // Find the most recent run for this pipeline
     let mostRecentKey: string | null = null;
     let mostRecentTime = 0;
-    
+
     for (const [key, running] of runningPipelines) {
       if (key.startsWith(`${id}:`)) {
         if (running.startTime > mostRecentTime) {
@@ -142,11 +142,11 @@ export async function stopPipeline(id: string, runId?: string): Promise<boolean>
         }
       }
     }
-    
+
     if (mostRecentKey) {
       return await stopPipelineRun(mostRecentKey);
     }
-    
+
     return false;
   }
 }
@@ -385,7 +385,7 @@ export async function runPipeline(
   const ctx = createPipelineContext(sandboxPath, mergedEnv, sshKeys, id, startTime, pipelineLog, controller.signal, inputs, runId, pipeline.name);
 
   pipelineLog(`[Sandbox] Created isolated working directory: ${sandboxPath}`);
-  
+
   // Log environment variables for debugging (only keys, not values for security)
   const envKeys = Object.keys(mergedEnv);
   pipelineLog(`[Engine] Environment "${resolvedPipelineEnv || 'none'}": ${envKeys.length} variables (${envKeys.slice(0, 10).join(', ')}${envKeys.length > 10 ? '...' : ''})`);
@@ -404,7 +404,7 @@ export async function runPipeline(
 
   // Track step execution status for dependency checking
   const stepStatuses = new Map<string, boolean>();
-  
+
   // Track module usage count for auto-generating step names (e.g., "shell_1", "delay_2")
   const moduleUsageCount = new Map<string, number>();
 
@@ -417,17 +417,17 @@ export async function runPipeline(
   // Also supports interpolation in variable path (e.g., "${inputs.env}.SKIP_BUILD")
   function shouldSkipStep(step: PipelineStep, ctx: PipelineContext): boolean {
     if (!step.skipWhen) return false;
-    
+
     const condition = step.skipWhen;
-    
+
     // Support interpolation in variable path (e.g., "${inputs.env}.SKIP_BUILD")
     let variablePath = condition.variable;
     if (variablePath.includes("${")) {
       variablePath = interpolate(variablePath, ctx) as string;
     }
-    
+
     const pathParts = variablePath.split('.');
-    
+
     // Get value from context using the path
     // Supports nested access: inputs.skipBuild, env.SKIP_TEST, results.stepName.skip, prev.skip
     let value: unknown = ctx;
@@ -438,12 +438,12 @@ export async function runPipeline(
       }
       value = value?.[key];
     }
-    
+
     // Helper for loose comparison (handles "1" == 1, "true" == true, etc.)
     const looseEquals = (a: unknown, b: unknown): boolean => {
       // Strict equality first
       if (a === b) return true;
-      
+
       // Handle string to number comparison
       if (typeof a === "string" && typeof b === "number") {
         return Number(a) === b;
@@ -451,7 +451,7 @@ export async function runPipeline(
       if (typeof a === "number" && typeof b === "string") {
         return a === Number(b);
       }
-      
+
       // Handle string to boolean comparison
       if (typeof a === "string" && typeof b === "boolean") {
         const lower = a.toLowerCase();
@@ -463,20 +463,20 @@ export async function runPipeline(
         if (a === true) return lower === "true" || lower === "1";
         if (a === false) return lower === "false" || lower === "0";
       }
-      
+
       return false;
     };
-    
+
     // Check equals condition
     if (condition.equals !== undefined) {
       return looseEquals(value, condition.equals);
     }
-    
+
     // Check notEquals condition
     if (condition.notEquals !== undefined) {
       return !looseEquals(value, condition.notEquals);
     }
-    
+
     return false;
   }
 
@@ -492,30 +492,30 @@ export async function runPipeline(
       moduleUsageCount.set(step.module, count);
       stepName = `${step.module}_${count}`;
     }
-    
+
     // Create step-specific logger that always uses this step's name (fixes race condition in parallel execution)
     const stepSpecificLog = (msg: string) => log(sanitizeLogMessage(msg), stepName);
-    
+
     // Check dependencies before execution
     checkDependencies(step, stepStatuses, stepSpecificLog);
-    
+
     // Check if step should be skipped
     if (shouldSkipStep(step, ctx)) {
       // Marker for saved logs parsing (not used in live mode)
       log(`SKIPPED: ${stepName} (condition: ${step.skipWhen?.variable})`, stepName);
       pubsub.publish({ type: "step-skipped", pipelineId: id, payload: { runId, step: stepName, stepIndex, totalSteps } });
-      
+
       const stepId = startStep(dbRunId, stepName, step.module);
       const skippedResult = { skipped: true, reason: step.skipWhen?.variable };
       endStep(stepId, true, skippedResult, undefined, true);
-      
+
       // Track as success for dependency checking (skipped steps are considered successful)
       if (step.name) stepStatuses.set(step.name, true);
-      
+
       pubsub.publish({ type: "step-end", pipelineId: id, payload: { runId, step: stepName, stepIndex, totalSteps, success: true, skipped: true } });
       return { step, result: skippedResult, stepIndex, skipped: true };
     }
-    
+
     // Marker for saved logs parsing (not used in live mode)
     log(`Running step: ${stepName}`, stepName);
     pubsub.publish({ type: "step-start", pipelineId: id, payload: { runId, step: stepName, stepIndex, totalSteps } });
@@ -591,7 +591,7 @@ export async function runPipeline(
           // Marker for saved logs parsing (not used in live mode)
           pipelineLog(`Running ${group.length} steps in parallel`);
           pubsub.publish({ type: "parallel-start", pipelineId: id, payload: { runId, count: group.length } });
-          
+
           const startIndex = currentStepIndex;
           const results = await Promise.all(
             group.map((step, i) => executeStep(step, startIndex + i))
@@ -600,7 +600,7 @@ export async function runPipeline(
           // Collect executed and skipped step names
           const executed = results.filter(r => !r.skipped).map(r => r.step.name || r.step.module);
           const skipped = results.filter(r => r.skipped).map(r => r.step.name || r.step.module);
-          
+
           pubsub.publish({ type: "parallel-end", pipelineId: id, payload: { runId, executed, skipped } });
 
           for (const { step, result } of results) {
@@ -639,7 +639,7 @@ export async function runPipeline(
     // Guarantee cleanup of runningPipelines Map to prevent memory leaks
     const pipelineRunKey = `${id}:${runId}`;
     runningPipelines.delete(pipelineRunKey);
-    
+
     // Decrement queue counter and process next in queue
     // This will only decrement if incrementRunningCount was called (it checks count > 0)
     decrementRunningCount(id);
@@ -667,20 +667,20 @@ function normalizeDependsOn(dependsOn?: string | string[]): string[] {
 // Get all step names defined before a given step index (for validation)
 function getStepNamesBeforeIndex(stepGroups: PipelineStep[][], targetGroupIndex: number, targetIndexInGroup: number): Set<string> {
   const names = new Set<string>();
-  
+
   for (let g = 0; g < stepGroups.length; g++) {
     const group = stepGroups[g];
     for (let s = 0; s < group.length; s++) {
       // Stop if we've reached the target step
       if (g === targetGroupIndex && s >= targetIndexInGroup) break;
       if (g > targetGroupIndex) break;
-      
+
       const step = group[s];
       if (step.name) names.add(step.name);
     }
     if (g >= targetGroupIndex) break;
   }
-  
+
   return names;
 }
 
@@ -691,11 +691,11 @@ function validateDependencies(stepGroups: PipelineStep[][]): void {
     for (let s = 0; s < group.length; s++) {
       const step = group[s];
       const deps = normalizeDependsOn(step.dependsOn);
-      
+
       if (deps.length === 0) continue;
-      
+
       const availableNames = getStepNamesBeforeIndex(stepGroups, g, s);
-      
+
       for (const dep of deps) {
         if (!availableNames.has(dep)) {
           const stepName = step.description || step.name || step.module;
@@ -711,15 +711,15 @@ function validateDependencies(stepGroups: PipelineStep[][]): void {
 
 // Check if all dependencies of a step have succeeded
 function checkDependencies(
-  step: PipelineStep, 
+  step: PipelineStep,
   stepStatuses: Map<string, boolean>,
   log: (msg: string) => void
 ): void {
   const deps = normalizeDependsOn(step.dependsOn);
   if (deps.length === 0) return;
-  
+
   const stepName = step.description || step.name || step.module;
-  
+
   for (const dep of deps) {
     const status = stepStatuses.get(dep);
     if (status === undefined) {
@@ -729,6 +729,6 @@ function checkDependencies(
       throw new Error(`Step "${stepName}" depends on "${dep}" which failed`);
     }
   }
-  
+
   log(`Dependencies satisfied for "${stepName}": ${deps.join(", ")}`);
 }

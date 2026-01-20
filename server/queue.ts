@@ -57,7 +57,7 @@ export function decrementRunningCount(pipelineId: string): void {
   if (state.runningCount > 0) {
     state.runningCount--;
   }
-  
+
   // Process queue if there are waiting items and we're below limit
   processQueue(pipelineId);
 }
@@ -72,17 +72,17 @@ export function enqueuePipeline(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const state = getQueueState(pipelineId);
-    
+
     const queueItem: QueueItem = {
       runtimeInputs,
       resolve,
       reject,
       timestamp: Date.now(),
     };
-    
+
     state.queue.push(queueItem);
     console.log(`[Queue] Pipeline ${pipelineId} queued (position: ${state.queue.length}, running: ${state.runningCount}/${config.maxConcurrentRunsPerPipeline})`);
-    
+
     // Try to process immediately (in case queue was empty and we just added)
     processQueue(pipelineId);
   });
@@ -94,12 +94,12 @@ export function enqueuePipeline(
 function processQueue(pipelineId: string): void {
   const state = getQueueState(pipelineId);
   const maxConcurrent = config.maxConcurrentRunsPerPipeline;
-  
+
   // Start queued items while under limit
   while (state.runningCount < maxConcurrent && state.queue.length > 0) {
     const item = state.queue.shift();
     if (!item) break;
-    
+
     // Resolve the promise to allow the run to start
     item.resolve(undefined);
     console.log(`[Queue] Pipeline ${pipelineId} dequeued and starting (queue length: ${state.queue.length})`);
@@ -112,16 +112,16 @@ function processQueue(pipelineId: string): void {
 export function clearQueue(pipelineId: string, reason?: string): void {
   const state = pipelineQueues.get(pipelineId);
   if (!state) return;
-  
+
   // Reject all queued items
   for (const item of state.queue) {
     item.reject(new Error(reason || "Pipeline queue cleared"));
   }
-  
+
   // Clear queue and reset count
   state.queue = [];
   state.runningCount = 0;
-  
+
   pipelineQueues.delete(pipelineId);
   console.log(`[Queue] Cleared queue for pipeline ${pipelineId}${reason ? `: ${reason}` : ""}`);
 }

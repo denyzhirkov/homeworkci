@@ -114,13 +114,13 @@ app.post("/:id/schedule/toggle", async (c) => {
   const pipeline = await loadPipeline(id);
   if (!pipeline) return c.json({ error: "Not found" }, 404);
   if (!pipeline.schedule) return c.json({ error: "Pipeline has no schedule" }, 400);
-  
+
   const newPaused = !pipeline.schedulePaused;
   // Extract id before saving (savePipeline expects Omit<Pipeline, "id">)
   const { id: _pipelineId, ...pipelineData } = pipeline;
   await savePipeline(id, { ...pipelineData, schedulePaused: newPaused });
   console.log(`[API] Schedule ${newPaused ? 'paused' : 'resumed'} for pipeline ${id}`);
-  
+
   pubsub.publish({ type: "pipelines:changed" });
   return c.json({ success: true, schedulePaused: newPaused });
 });

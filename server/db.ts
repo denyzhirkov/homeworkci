@@ -82,7 +82,7 @@ export function finishRun(
   durationMs: number
 ) {
   const stmt = db.prepare(`
-    UPDATE runs 
+    UPDATE runs
     SET status = ?, log_content = ?, finished_at = ?, duration_ms = ?
     WHERE id = ?
   `);
@@ -144,7 +144,7 @@ export function finishStep(
   error?: string
 ) {
   const stmt = db.prepare(`
-    UPDATE steps 
+    UPDATE steps
     SET status = ?, finished_at = ?, result_json = ?, error = ?
     WHERE id = ?
   `);
@@ -174,7 +174,7 @@ export interface PipelineStats {
 
 export function getPipelineStats(pipelineId: string): PipelineStats {
   const stmt = db.prepare(`
-    SELECT 
+    SELECT
       COUNT(*) as total_runs,
       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_runs,
       SUM(CASE WHEN status IN ('fail', 'cancelled', 'interrupted') THEN 1 ELSE 0 END) as failed_runs,
@@ -195,8 +195,8 @@ export function getPipelineStats(pipelineId: string): PipelineStats {
     total_runs: row.total_runs || 0,
     successful_runs: row.successful_runs || 0,
     failed_runs: row.failed_runs || 0,
-    success_rate: row.total_runs > 0 
-      ? (row.successful_runs / row.total_runs) * 100 
+    success_rate: row.total_runs > 0
+      ? (row.successful_runs / row.total_runs) * 100
       : 0,
     avg_duration_ms: row.avg_duration_ms,
     last_run_at: row.last_run_at,
@@ -219,7 +219,7 @@ export function getOverviewStats(): OverviewStats {
   const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
 
   const stmt = db.prepare(`
-    SELECT 
+    SELECT
       COUNT(DISTINCT pipeline_id) as total_pipelines_run,
       COUNT(*) as total_runs,
       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_runs,
@@ -258,23 +258,23 @@ export function getOverviewStats(): OverviewStats {
  */
 export function recoverInterruptedRuns(): number {
   const stmt = db.prepare(`
-    UPDATE runs 
-    SET status = 'interrupted', 
+    UPDATE runs
+    SET status = 'interrupted',
         finished_at = ?,
-        duration_ms = CASE 
-          WHEN started_at > 0 THEN ? - started_at 
-          ELSE NULL 
+        duration_ms = CASE
+          WHEN started_at > 0 THEN ? - started_at
+          ELSE NULL
         END
     WHERE status = 'running'
   `);
   const now = Date.now();
   stmt.run(now, now);
   const affected = db.changes;
-  
+
   if (affected > 0) {
     console.log(`[DB] Recovered ${affected} interrupted pipeline run(s)`);
   }
-  
+
   return affected;
 }
 

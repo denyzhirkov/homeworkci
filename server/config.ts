@@ -22,7 +22,7 @@ export const config = {
 
   // --- Features ---
   enableScheduler: getEnvBool("ENABLE_SCHEDULER", true),
-  
+
   // --- Pipeline Queue ---
   maxConcurrentRunsPerPipeline: getEnvInt("MAX_CONCURRENT_RUNS_PER_PIPELINE", 1),
 
