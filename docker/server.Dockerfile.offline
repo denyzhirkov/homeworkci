@@ -1,29 +1,15 @@
-# HomeworkCI Server Dockerfile
-# Deno runtime with bundled frontend build
+# HomeworkCI Server Dockerfile (Offline Build)
+# Uses pre-built client from client/dist directory
+# For environments with limited internet access
 #
-# Standard build - builds client inside Docker (requires internet during build)
-# For offline builds, use docker/server.Dockerfile.offline instead
+# Usage:
+#   1. Run: ./scripts/build-offline.sh (or manually build client)
+#   2. Build: docker build -f docker/server.Dockerfile.offline -t homeworkci:latest .
 
-# === Frontend Build Stage ===
-FROM node:20-slim AS client-build
-
-WORKDIR /app/client
-
-# Install dependencies
-COPY client/package*.json ./
-RUN npm ci
-
-# Build frontend
-COPY client/ ./
-ARG VITE_API_BASE=/api
-ENV VITE_API_BASE=$VITE_API_BASE
-RUN npm run build
-
-# === Server Stage ===
 FROM denoland/deno:2.6.3
 
 LABEL maintainer="HomeworkCI"
-LABEL description="HomeworkCI Pipeline Server (with frontend)"
+LABEL description="HomeworkCI Pipeline Server (with pre-built frontend)"
 
 WORKDIR /app
 
@@ -51,8 +37,7 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
     apt-get install -y --no-install-recommends docker-ce-cli && \
     rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security (using Debian commands)
-# Add user to docker group for Docker socket access
+# Create non-root user for security
 RUN groupadd --system --gid 1001 homeworkci && \
     useradd --system --uid 1001 --gid homeworkci --shell /bin/false homeworkci && \
     usermod -aG docker homeworkci 2>/dev/null || true
@@ -80,8 +65,14 @@ COPY config/ ./defaults/config/
 COPY modules/ ./modules/
 COPY pipelines/ ./pipelines/
 
-# Copy built frontend
-COPY --from=client-build /app/client/dist ./client/dist/
+# Copy pre-built frontend (must exist from build-offline.sh)
+COPY client/dist/ ./client/dist/
+
+# Verify frontend exists
+RUN if [ ! -d "./client/dist" ] || [ -z "$(ls -A ./client/dist 2>/dev/null)" ]; then \
+    echo "Error: client/dist is missing or empty. Run ./scripts/build-offline.sh first." && \
+    exit 1; \
+    fi
 
 # Copy entrypoint script
 COPY docker/entrypoint.sh /entrypoint.sh

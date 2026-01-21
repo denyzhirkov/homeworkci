@@ -1,0 +1,81 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+PLANNED_MODULES.md
+*.md
+
+# Environment files
+.env
+.env.local
+.env.*.local
+direnv/
+
+# Development files
+.editorconfig
+docker-compose.dev.yml
+docker-compose.override.yml
+
+# Logs
+logs/
+*.log
+
+# Database and data
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite-journal
+*.db-wal
+*.db-shm
+
+# Sandbox temp directories
+tmp/
+
+# Node modules (will be installed in container)
+node_modules/
+client/node_modules/
+
+# Build artifacts
+# Note: client/dist/ is excluded for standard builds (built in container)
+# For offline builds, see docker/server.Dockerfile.offline.dockerignore
+client/dist/
+client/.vite/
+client/.eslintcache
+dist/
+build/
+*.tsbuildinfo
+
+# Deno
+cov_profile
+coverage
+.deno/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+.cursor/
+
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+
+# Docker
+docker-compose.yml
+docker-compose.*.yml
+.docker/
+
+# Scripts (not needed in production image)
+scripts/
+
+# Local config
+config.local.json
